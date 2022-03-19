@@ -1,0 +1,11 @@
+# Infinity Notebook
+
+This notebook contains every piece of text that will ever exist (limited to 2000 Unicode characters).
+
+Try to edit this text and press enter to search for that page in the notebook.
+
+To change the page number, click on the page number on top of the page and change it to whatever you like.
+
+To write multiline text, press Shift + Enter.
+
+(╯°□°）╯︵ ┻━┻
