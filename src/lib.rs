@@ -4,9 +4,6 @@ extern crate lazy_static;
 mod utils;
 use std::{fmt::Error, ops::{Shl, Shr}};
 
-extern crate short_crypt;
-use short_crypt::{ShortCrypt};
-
 extern crate base64;
 
 use substring::Substring;
