@@ -9,6 +9,12 @@ module.exports = {
   },
   mode: "development",
   plugins: [
-    new CopyWebpackPlugin(['index.html'])
+    new CopyWebpackPlugin([
+      'index.html',
+      'favicon.ico',
+      'favicon-32x32.png',
+      'favicon-16x16.png',
+      'apple-touch-icon.png',
+    ])
   ],
 };
