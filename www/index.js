@@ -1,12 +1,13 @@
 import * as wasm from "infinity-notebook";
 
 wasm.init();
-const relativeUrl = 'infinity-notebook';
+const relativeUrl = 'infinity-notebook/';
 const b64path = window.location.search.substring(1);
 const pageNumber = wasm.base64_to_page_number(b64path);
-if (pageNumber === undefined) window.location.href = `/${relativeUrl}/?`+wasm.page_number_to_base64("1");
+if (pageNumber === undefined) window.location.href = `/${relativeUrl}?`+wasm.page_number_to_base64("1");
 else {
 
+window.document.title += `: ${wasm.get_pagename(pageNumber)}`;
 var paper = document.getElementById('content');
 var pageNumberElement = document.getElementById('pagenum');
 const pageContent = wasm.get_page(pageNumber);
@@ -15,7 +16,7 @@ pageNumberElement.value = "Page "+wasm.get_pagename(pageNumber);
 
 paper.addEventListener('keypress', function (e) {
     if (e.key === 'Enter' && !e.shiftKey) {
-        window.location.href = `/${relativeUrl}/?`+wasm.page_number_to_base64(wasm.get_search(paper.value));
+        window.location.href = `/${relativeUrl}?`+wasm.page_number_to_base64(wasm.get_search(paper.value));
     }
 });
 
@@ -56,7 +57,7 @@ pageNumberElement.addEventListener("focusin", function (e) {
 });
 function navigate() {
     if (pageNumberElement.value != pageNumber) {
-        window.location.href = `/${relativeUrl}/?`+wasm.page_number_to_base64(pageNumberElement.value);
+        window.location.href = `/${relativeUrl}?`+wasm.page_number_to_base64(pageNumberElement.value);
     } else {
         pageNumberElement.value = "Page "+wasm.get_pagename(pageNumber);
     }
