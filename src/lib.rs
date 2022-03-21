@@ -152,8 +152,6 @@ fn biguint_to_words(number: BigUint) -> String {
     format!("{} {}", number_string_with_spaces, suffix_str)
 }
 
-/// Adds whitespace to the end of the string to make it the specified length.
-/// If the string is already longer than the specified length, it is truncated.
 fn set_string_length_to(string: String, length: usize) -> String {
     let mut result = string;
     while result.chars().count() > length {
