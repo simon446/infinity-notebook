@@ -27,12 +27,12 @@ paper.addEventListener('input', function (e) {
         searchMode = false;
         pageNumberElement.value = "Page "+wasm.get_pagename(pageNumber);
         pageNumberElement.readOnly = false;
-        pageNumberElement.style.color = "black";
+        pageNumberElement.classList.remove("colored");
     } else {
         pageNumberElement.value = "Press Enter to search";
         searchMode = true;
         pageNumberElement.readOnly = true;
-        pageNumberElement.style.color = "red";
+        pageNumberElement.classList.add("colored");
     }
 });
 
@@ -41,12 +41,12 @@ pageNumberElement.addEventListener('input', function (e) {
         pageMode = false;
         paper.value = pageContent;
         paper.readOnly = false;
-        paper.style.color = "black";
+        paper.classList.remove("colored");
     } else {
         pageMode = true;
         paper.value = "Press Enter to go to page";
         paper.readOnly = true;
-        paper.style.color = "red";
+        paper.classList.add("colored");
     }
 });
 
@@ -67,7 +67,7 @@ pageNumberElement.addEventListener('focusout', (event) => {
     pageMode = false;
     paper.value = pageContent;
     paper.readOnly = false;
-    paper.style.color = "black";
+    paper.classList.remove("colored");
     pageNumberElement.value = "Page "+wasm.get_pagename(pageNumber);
 });
 pageNumberElement.addEventListener('keypress', function (e) {
@@ -78,7 +78,7 @@ pageNumberElement.addEventListener('keypress', function (e) {
         pageMode = false;
         paper.value = pageContent;
         paper.readOnly = false;
-        paper.style.color = "black";
+        paper.classList.remove("colored");
         pageNumberElement.value = "Page "+wasm.get_pagename(pageNumber);
         // Unfocus the input field
         pageNumberElement.blur();
