@@ -17,6 +17,7 @@ mod smaz;
 use smaz::{compress,decompress};
 
 static PAGE1: &str = include_str!("page1.txt");
+static MAX_STRING_LENGTH: usize = 2000;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -152,14 +153,6 @@ fn biguint_to_words(number: BigUint) -> String {
     format!("{} {}", number_string_with_spaces, suffix_str)
 }
 
-fn set_string_length_to(string: String, length: usize) -> String {
-    let mut result = string;
-    while result.chars().count() > length {
-        result.pop();
-    }
-    result
-}
-
 fn text_to_page_number(text: String) -> BigUint {
     log!("Compare strings '{}' and '{}'", text, PAGE1);
     if text.eq(&PAGE1) {
@@ -228,7 +221,7 @@ pub fn get_page(page_number: String) -> Option<String> {
         Some(text) => text,
         None => return None
     };
-    Some(set_string_length_to(text, 2000))
+    Some(limit_string_length(text))
 }
 
 #[wasm_bindgen]
@@ -242,7 +235,7 @@ pub fn get_pagename(page_number: String) -> Option<String> {
 
 #[wasm_bindgen]
 pub fn get_search(text: String) -> String {
-    let text = set_string_length_to(text, 2000);
+    let text = limit_string_length(text);
     text_to_page_number(text).to_str_radix(10)
 }
 
@@ -260,5 +253,14 @@ pub fn base64_to_page_number(base64_string: String) -> Option<String> {
     match base64_string_to_page_number(base64_string) {
         Some(page_number) => Some(page_number.to_str_radix(10)),
         None => None
+    }
+}
+
+#[wasm_bindgen]
+pub fn limit_string_length(string: String) -> String {
+    if string.len() > MAX_STRING_LENGTH {
+        string.substring(0, MAX_STRING_LENGTH).to_string()
+    } else {
+        string
     }
 }

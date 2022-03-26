@@ -1,7 +1,7 @@
 import * as wasm from "infinity-notebook";
 
 wasm.init();
-const relativeUrl = 'infinity-notebook/';
+const relativeUrl = location.hostname === 'localhost' ? '' : 'infinity-notebook/';
 const b64path = window.location.search.substring(1);
 const pageNumber = wasm.base64_to_page_number(b64path);
 if (pageNumber === undefined) window.location.href = `/${relativeUrl}?`+wasm.page_number_to_base64("1");
@@ -23,6 +23,7 @@ paper.addEventListener('keypress', function (e) {
 let searchMode = false;
 let pageMode = false;
 paper.addEventListener('input', function (e) {
+    paper.value = wasm.limit_string_length(paper.value);
     if (paper.value === pageContent) {
         searchMode = false;
         pageNumberElement.value = "Page "+wasm.get_pagename(pageNumber);
