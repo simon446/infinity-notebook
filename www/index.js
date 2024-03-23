@@ -5,8 +5,12 @@ const relativeUrl = location.hostname === 'localhost' ? '' : 'infinity-notebook/
 const b64pathLegacy = window.location.search.substring(1);
 const b64path = window.location.hash.substring(1);
 const pageNumber = wasm.base64_to_page_number(b64path);
-if (b64pathLegacy !== "") window.location.href = `/${relativeUrl}#`+b64pathLegacy;
-else if (pageNumber === undefined) window.location.href = `/${relativeUrl}#`+wasm.page_number_to_base64("1");
+function jumpTo(b64path) {
+    window.location.href = `/${relativeUrl}#`+b64path;
+    location.reload();
+}
+if (b64pathLegacy !== "") jumpTo(b64pathLegacy);
+else if (pageNumber === undefined) jumpTo(wasm.page_number_to_base64("1"));
 else {
 
 window.document.title += `: ${wasm.get_pagename(pageNumber)}`;
@@ -18,7 +22,7 @@ pageNumberElement.value = "Page "+wasm.get_pagename(pageNumber);
 
 paper.addEventListener('keypress', function (e) {
     if (e.key === 'Enter' && !e.shiftKey) {
-        window.location.href = `/${relativeUrl}#`+wasm.page_number_to_base64(wasm.get_search(paper.value));
+        jumpTo(wasm.page_number_to_base64(wasm.get_search(paper.value)));
     }
 });
 
@@ -60,7 +64,7 @@ pageNumberElement.addEventListener("focusin", function (e) {
 });
 function navigate() {
     if (pageNumberElement.value != pageNumber) {
-        window.location.href = `/${relativeUrl}#`+wasm.page_number_to_base64(pageNumberElement.value);
+        jumpTo(wasm.page_number_to_base64(pageNumberElement.value));
     } else {
         pageNumberElement.value = "Page "+wasm.get_pagename(pageNumber);
     }
