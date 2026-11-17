@@ -4,7 +4,7 @@ This notebook contains every piece of text that will ever exist (up to 2000 char
 
 Go on, try it: change this text and press Enter, or tap "Find this page". Your words are already written down somewhere in here, and the notebook will open on that page.
 
-Flip pages with the arrows, roll the dice for a random page, or tap the page number and type any number you like.
+Flip through the pages with the arrows at the top, the arrow keys, or a swipe. Roll the dice for a random page, or tap the page number and type any number you like.
 
 For a new line on a keyboard, press Shift + Enter.
 

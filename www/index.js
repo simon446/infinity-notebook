@@ -9,6 +9,7 @@ const pageNumberElement = document.getElementById('pagenum');
 const previousButton = document.getElementById('previous');
 const nextButton = document.getElementById('next');
 const randomButton = document.getElementById('random');
+const sheet = document.getElementById('sheet');
 const note = document.getElementById('note');
 const noteText = document.getElementById('note-text');
 const noteProgress = document.getElementById('note-progress');
@@ -168,7 +169,9 @@ function pageNumberFromHash() {
 }
 
 function jumpTo(number) {
-    if (number === pageNumber) showPage();
+    // Compare with the URL, not `pageNumber`, which lags behind it for a
+    // moment after every jump.
+    if (number === pageNumberFromHash()) showPage();
     else window.location.hash = 'p' + number;
 }
 
@@ -348,10 +351,48 @@ pageNumberElement.addEventListener('keydown', function (e) {
 // after every jump.
 function flip(pages) {
     const number = BigInt(pageNumberFromHash() ?? pageNumber) + pages;
-    if (number >= 1n) jumpTo(number.toString());
+    if (number < 1n) return;
+    // Turn the sheet over in the direction of travel.
+    const turn = pages > 0n ? 'turn-forward' : 'turn-back';
+    paper.classList.remove('turn-forward', 'turn-back');
+    void paper.offsetWidth;
+    paper.classList.add(turn);
+    jumpTo(number.toString());
 }
+paper.addEventListener('animationend', () => paper.classList.remove('turn-forward', 'turn-back'));
 previousButton.addEventListener('click', () => flip(-1n));
 nextButton.addEventListener('click', () => flip(1n));
+
+// Page Up and Page Down flip pages, and so do the arrow keys while nothing
+// is being typed.
+document.addEventListener('keydown', function (e) {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    const typing = document.activeElement === paper || document.activeElement === pageNumberElement;
+    let pages;
+    if (e.key === 'PageDown' || (e.key === 'ArrowRight' && !typing)) pages = 1n;
+    else if (e.key === 'PageUp' || (e.key === 'ArrowLeft' && !typing)) pages = -1n;
+    else return;
+    e.preventDefault();
+    flip(pages);
+});
+
+// A quick sideways swipe across the page flips it too, unless there are
+// edits on it that a stray swipe would throw away.
+let swipe;
+sheet.addEventListener('touchstart', function (e) {
+    const { clientX: x, clientY: y } = e.touches[0];
+    swipe = e.touches.length === 1 ? { x, y, time: Date.now() } : undefined;
+}, { passive: true });
+sheet.addEventListener('touchend', function (e) {
+    if (!swipe || searchMode) return;
+    const { clientX: x, clientY: y } = e.changedTouches[0];
+    const [dx, dy] = [x - swipe.x, y - swipe.y];
+    const quick = Date.now() - swipe.time < 600;
+    swipe = undefined;
+    if (!quick || Math.abs(dx) < 70 || Math.abs(dx) < 2.5 * Math.abs(dy)) return;
+    if (window.getSelection().toString() !== "") return;
+    flip(dx < 0 ? 1n : -1n);
+}, { passive: true });
 
 randomButton.addEventListener('click', function () {
     // Anything from a short scribble to a few lines of text.
