@@ -6,36 +6,132 @@ wasm.init();
 
 const paper = document.getElementById('content');
 const pageNumberElement = document.getElementById('pagenum');
+const previousButton = document.getElementById('previous');
+const nextButton = document.getElementById('next');
+const randomButton = document.getElementById('random');
+const note = document.getElementById('note');
+const noteText = document.getElementById('note-text');
+const noteProgress = document.getElementById('note-progress');
+const noteAction = document.getElementById('note-action');
 const baseTitle = window.document.title;
+
+// On a touch keyboard Enter makes a new line and the button searches.
+const touch = window.matchMedia('(pointer: coarse)').matches;
 
 let pageNumber;          // the page being shown, as a decimal string
 let pageContent = "";    // its text, once known
-let searchMode = false;  // the text was edited: Enter searches for it
-let busy = false;        // the language model is reading or searching
-let job = {};            // the model work for the current page
+let searchMode = false;  // the text was edited and can be searched for
+let busy = false;        // a page is being read or searched for
+let job = {};            // the work for the current page
+let justFound;           // the page number a search just led to
 const knownPages = new Map([["1", wasm.first_page()]]);
 
-const MODEL_FAILED = "Could not load the language model";
+// What the sticky note says while the notebook is busy. Each list is cycled
+// through so a long wait does not show the same line all the time.
+const MESSAGES = {
+    fetching: [
+        "Hauling the notebook off the shelf. It is heavier than it looks",
+        "Still carrying. Infinity weighs about 135 MB",
+        "Almost at the desk",
+    ],
+    opening: ["Blowing the dust off the cover"],
+    searching: [
+        "Flipping through the pages",
+        "Licking a finger, flipping faster",
+        "Past the grocery lists",
+        "Somewhere after the love letters",
+        "It has to be in here somewhere",
+        "Skipping a few trillion pages",
+    ],
+    closing: ["Getting warmer", "Nearly there", "Just a few more pages"],
+    reading: [
+        "Deciphering the handwriting",
+        "Squinting at the page",
+        "Whoever wrote this was in a hurry",
+        "Reading between the lines",
+    ],
+};
+const MESSAGE_SECONDS = 2.8;
+let phase, phaseStart;
 
-// The language model is only fetched once a page actually needs it.
+/** The current line for a phase of work, with trailing dots that grow. */
+function message(name) {
+    if (phase !== name) {
+        phase = name;
+        phaseStart = Date.now();
+    }
+    const seconds = (Date.now() - phaseStart) / 1000;
+    const lines = MESSAGES[name];
+    return lines[Math.floor(seconds / MESSAGE_SECONDS) % lines.length] + ".".repeat(1 + Math.floor(seconds * 2) % 3);
+}
+
+/**
+ * Puts up the sticky note.
+ * @param progress a fraction for a pencil line of that length, "scribble"
+ *   for work of unknown length, or nothing for no pencil
+ * @param action a button: { label, run }
+ */
+let noteTimer;
+function showNote(text, { progress, action, seconds } = {}) {
+    clearTimeout(noteTimer);
+    noteText.textContent = text;
+    noteProgress.hidden = progress === undefined;
+    noteProgress.classList.toggle('scribble', progress === "scribble");
+    if (typeof progress === "number") noteProgress.style.setProperty('--progress', `${Math.round(100 * progress)}%`);
+    noteAction.hidden = !action;
+    if (action) {
+        noteAction.textContent = action.label;
+        noteAction.onclick = action.run;
+    }
+    note.hidden = false;
+    if (seconds) noteTimer = setTimeout(hideNote, 1000 * seconds);
+}
+
+function hideNote() {
+    clearTimeout(noteTimer);
+    note.hidden = true;
+    phase = undefined;
+}
+
+/** Reports work in progress; repeats itself so the wording keeps moving. */
+let workTimer;
+function showWork(describe) {
+    clearInterval(workTimer);
+    const update = () => {
+        const { text, progress } = describe();
+        showNote(text, { progress });
+    };
+    workTimer = setInterval(update, 400);
+    update();
+    return update;
+}
+
+function stopWork() {
+    clearInterval(workTimer);
+}
+
+// The index of the notebook is only fetched once a page actually needs it.
 let modelPromise;
+let fetched = 0;
 function getModel() {
     if (!modelPromise) {
-        const megabytes = (bytes) => Math.round(bytes / 1e6);
-        modelPromise = loadLanguageModel(wasm, (done, total) => showStatus(
-            done < total
-                ? `Loading language model (${megabytes(done)} of ${megabytes(total)} MB)`
-                : "Starting language model"
-        )).catch((error) => {
+        modelPromise = loadLanguageModel(wasm, (done, total) => { fetched = done / total; }).catch((error) => {
             modelPromise = undefined;
-            error.modelFailed = true;
+            fetched = 0;
+            error.fetchFailed = true;
             throw error;
         });
     }
     return modelPromise;
 }
 
-// The model can only do one thing at a time.
+function describeFetching() {
+    return fetched < 1
+        ? { text: message("fetching"), progress: fetched }
+        : { text: message("opening"), progress: "scribble" };
+}
+
+// The notebook can only do one thing at a time.
 let queue = Promise.resolve();
 function enqueue(task) {
     const result = queue.then(task);
@@ -43,22 +139,24 @@ function enqueue(task) {
     return result;
 }
 
-function showStatus(text) {
-    pageNumberElement.value = text;
-    pageNumberElement.readOnly = true;
-    pageNumberElement.classList.add("colored");
+function pageName(number) {
+    return wasm.get_pagename(number).trim();
 }
 
 function showPageName() {
-    pageNumberElement.value = "Page " + wasm.get_pagename(pageNumber);
-    pageNumberElement.readOnly = false;
-    pageNumberElement.classList.remove("colored");
+    pageNumberElement.value = "Page " + pageName(pageNumber);
+    previousButton.disabled = pageNumber === "1";
 }
 
-function showPageContent() {
-    paper.value = pageContent;
-    paper.readOnly = false;
-    paper.classList.remove("colored");
+/** Sets the text on the page and makes the page as tall as the text. */
+function write(text) {
+    paper.value = text;
+    fitPaper();
+}
+
+function fitPaper() {
+    paper.style.height = 'auto';
+    paper.style.height = paper.scrollHeight + 'px';
 }
 
 // Pages live in the URL as #p<page number>.
@@ -70,7 +168,15 @@ function pageNumberFromHash() {
 }
 
 function jumpTo(number) {
-    window.location.hash = 'p' + number;
+    if (number === pageNumber) showPage();
+    else window.location.hash = 'p' + number;
+}
+
+function offerSearch() {
+    showNote(
+        touch ? "New words! Shall I find the page they are written on?" : "New words! Press Enter and I will find the page they are written on.",
+        { action: { label: "Find this page", run: search } }
+    );
 }
 
 async function showPage() {
@@ -82,121 +188,183 @@ async function showPage() {
 
     job.aborted = true;
     const thisJob = job = {};
+    stopWork();
     pageNumber = number;
     searchMode = false;
-    window.document.title = `${baseTitle}: ${wasm.get_pagename(pageNumber)}`;
+    window.document.title = `${baseTitle} – Page ${pageName(number)}`;
+    showPageName();
 
     if (!knownPages.has(number)) {
         busy = true;
         pageContent = "";
-        paper.value = "";
+        write("");
         paper.readOnly = true;
-        paper.classList.remove("colored");
-        showStatus("Loading language model");
+        let reading = false;
+        showWork(() => reading ? { text: message("reading"), progress: "scribble" } : describeFetching());
         try {
             const model = await getModel();
             const text = await enqueue(() => {
-                if (!thisJob.aborted) showStatus("Reading page");
-                return model.decode(number, (text) => { paper.value = text; }, thisJob);
+                reading = true;
+                return model.decode(number, (text) => { if (!thisJob.aborted) write(text); }, thisJob);
             });
             knownPages.set(number, text);
         } catch (error) {
             if (thisJob.aborted) return;
             console.error(error);
+            stopWork();
             busy = false;
-            showStatus(error.modelFailed ? MODEL_FAILED : "Could not read this page");
+            showNote(
+                error.fetchFailed
+                    ? "The notebook slipped on the way to the desk. Shall I pick it up again?"
+                    : "This page is smudged beyond reading. Shall I try once more?",
+                { action: { label: "Try again", run: showPage } }
+            );
             return;
         }
         if (thisJob.aborted) return;
+        stopWork();
     }
 
     busy = false;
     pageContent = knownPages.get(number);
-    showPageContent();
-    showPageName();
+    write(pageContent);
+    paper.readOnly = false;
+    if (justFound === number) {
+        showNote(pageContent === "" ? "Found it! The one blank page in the whole notebook." : "Found it! It was on this page all along.", { seconds: 4 });
+    } else if (pageContent === "") {
+        showNote("Nothing on this page yet. Whatever you write here already has a page of its own.", { seconds: 5 });
+    } else {
+        hideNote();
+    }
+    justFound = undefined;
 }
 
 async function search() {
+    if (busy || !searchMode) return;
     const text = wasm.limit_string_length(paper.value);
     const thisJob = job;
     busy = true;
     paper.readOnly = true;
+    let done = 0, total = 0;
+    showWork(() => {
+        if (total === 0) return describeFetching();
+        const progress = done / total;
+        return { text: message(progress < 0.7 ? "searching" : "closing"), progress };
+    });
     try {
         let number = "1";
         if (text !== wasm.first_page()) {
-            showStatus("Loading language model");
             const model = await getModel();
-            number = await enqueue(() => model.encode(
-                text,
-                (done, total) => { if (!thisJob.aborted) showStatus(`Searching (${done}/${total})`); },
-                thisJob
-            ));
+            number = await enqueue(() => model.encode(text, (tokensDone, tokens) => {
+                done = tokensDone;
+                total = Math.max(tokens, 1);
+            }, thisJob));
             knownPages.set(number, model.normalize(text));
         }
         if (thisJob.aborted) return;
-        if (number === pageNumber) showPage();
-        else jumpTo(number);
+        stopWork();
+        justFound = number;
+        jumpTo(number);
     } catch (error) {
         if (thisJob.aborted) return;
         console.error(error);
+        stopWork();
         busy = false;
         paper.readOnly = false;
-        showStatus(error.modelFailed ? MODEL_FAILED : "Could not search, press Enter to retry");
+        showNote(
+            error.fetchFailed
+                ? "The notebook slipped on the way to the desk. Shall I pick it up again?"
+                : "I lost my place somewhere around page a-gazillion. Shall I start over?",
+            { action: { label: "Try again", run: search } }
+        );
     }
 }
 
-paper.addEventListener('keypress', function (e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+paper.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !touch) {
         e.preventDefault();
-        if (searchMode && !busy) search();
+        search();
     }
 });
 
-paper.addEventListener('input', function (e) {
+paper.addEventListener('input', function () {
     if (busy) return;
     const limited = wasm.limit_string_length(paper.value);
     if (limited !== paper.value) paper.value = limited;
+    fitPaper();
     if (paper.value === pageContent) {
         searchMode = false;
-        showPageName();
-    } else {
+        hideNote();
+    } else if (!searchMode) {
         searchMode = true;
-        showStatus("Press Enter to search");
+        offerSearch();
     }
 });
 
-pageNumberElement.addEventListener('input', function (e) {
-    if (pageNumberElement.value === pageNumber) {
-        showPageContent();
-    } else {
-        paper.value = "Press Enter to go to page";
-        paper.readOnly = true;
-        paper.classList.add("colored");
-    }
-});
-
-pageNumberElement.addEventListener("focusin", function (e) {
-    if (searchMode || busy) { e.preventDefault(); return; }
+// The page number shows the page's name, and its digits while being edited.
+pageNumberElement.addEventListener('focus', function () {
     pageNumberElement.value = pageNumber;
-    setTimeout(() => { this.setSelectionRange(0, this.value.length) }, 10)
+    setTimeout(() => pageNumberElement.select(), 10);
 });
 
-pageNumberElement.addEventListener('focusout', (event) => {
-    if (searchMode || busy) return;
-    showPageContent();
+pageNumberElement.addEventListener('input', function () {
+    const digits = pageNumberElement.value.replace(/\D/g, '');
+    if (digits !== pageNumberElement.value) pageNumberElement.value = digits;
+    if (digits !== "" && digits !== pageNumber) {
+        turnOffered = true;
+        showNote(touch ? "Shall I turn to that page?" : "Press Enter and I will turn to that page.", {
+            action: { label: "Turn the page", run: () => turnTo(digits) },
+        });
+    }
+});
+
+let turnOffered = false; // the note is offering to turn to a typed page number
+
+function turnTo(digits) {
+    const number = digits === "" ? "0" : BigInt(digits).toString();
+    pageNumberElement.blur();
+    if (number !== "0") jumpTo(number);
+}
+
+pageNumberElement.addEventListener('blur', function () {
     showPageName();
+    if (!turnOffered) return;
+    turnOffered = false;
+    // Leave the offer up for a moment: a tap on its button comes after the blur.
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => {
+        if (busy) return;
+        if (searchMode) offerSearch();
+        else hideNote();
+    }, 4000);
 });
 
 pageNumberElement.addEventListener('keydown', function (e) {
-    if (searchMode || busy) return;
-    if (e.key === 'Enter') {
-        const number = pageNumberElement.value;
-        pageNumberElement.blur();
-        if (/^\d+$/.test(number)) jumpTo(number);
-    } else if (e.key === 'Escape') {
-        pageNumberElement.blur();
-    }
+    if (e.key === 'Enter') turnTo(pageNumberElement.value);
+    else if (e.key === 'Escape') pageNumberElement.blur();
 });
 
+// Flip from the page in the URL, which is ahead of `pageNumber` for a moment
+// after every jump.
+function flip(pages) {
+    const number = BigInt(pageNumberFromHash() ?? pageNumber) + pages;
+    if (number >= 1n) jumpTo(number.toString());
+}
+previousButton.addEventListener('click', () => flip(-1n));
+nextButton.addEventListener('click', () => flip(1n));
+
+randomButton.addEventListener('click', function () {
+    // Anything from a short scribble to a few lines of text.
+    const digits = 8 + Math.floor(Math.random() * 60);
+    let number = String(1 + Math.floor(Math.random() * 9));
+    while (number.length < digits) number += Math.floor(Math.random() * 10);
+    randomButton.classList.remove('rolling');
+    void randomButton.offsetWidth;
+    randomButton.classList.add('rolling');
+    jumpTo(number);
+});
+
+window.addEventListener('resize', fitPaper);
 window.addEventListener('hashchange', showPage);
+document.fonts?.ready.then(fitPaper);
 showPage();

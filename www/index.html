@@ -3,136 +3,280 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
-    <title>Notes</title>
+    <title>Infinity Notebook</title>
     <meta name="author" content="Simon Johansson">
+    <meta name="description" content="A notebook that contains every piece of text that will ever exist.">
+    <meta name="theme-color" content="#ece9e2" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0e1117" media="(prefers-color-scheme: dark)">
 
     <link rel="icon" href="./favicon.ico">
-    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Handlee&family=Roboto+Slab:wght@400;600&display=swap">
+
     <style>
-        @import url(https://fonts.googleapis.com/css?family=Roboto);
-        @import url('https://fonts.googleapis.com/css2?family=Roboto+Slab&display=swap');
-        @import url(https://fonts.googleapis.com/css?family=Handlee);
+        :root {
+            --line: 30px;           /* height of one ruled line */
+            --margin: 64px;         /* the punched margin on the left */
+            --hole: 6px;
+            --gap: 32px;            /* space around the notebook */
+            --desk: #ece9e2;
+            --paper: #fffdf8;
+            --ink: #1f2933;
+            --faded-ink: #6b7480;
+            --rule: #cfd8e6;
+            --margin-rule: #f0a8a8;
+            --accent: #d1483b;
+            --note: #fff2a1;
+            --note-ink: #4a3f12;
+            --shadow: rgba(0, 0, 0, .22);
+            color-scheme: light dark;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --desk: #0e1117;
+                --paper: #161b22;
+                --ink: #c8d1d9;
+                --faded-ink: #7d8794;
+                --rule: #2b323b;
+                --margin-rule: #5c3033;
+                --accent: #ff8a7a;
+                --note: #f4e58c;
+                --note-ink: #3b3210;
+                --shadow: rgba(0, 0, 0, .6);
+            }
+        }
+        @media (max-width: 600px) {
+            :root {
+                --margin: 30px;
+                --hole: 4px;
+                --gap: 10px;
+            }
+        }
+
+        * { box-sizing: border-box; }
 
         body {
-            margin: 40px 0;
-            background: #f2f2f2;
+            margin: 0;
+            padding: var(--gap) max(var(--gap), env(safe-area-inset-right)) 0 max(var(--gap), env(safe-area-inset-left));
+            background: var(--desk);
+            color: var(--ink);
+            font-family: 'Handlee', 'Comic Sans MS', cursive;
+            -webkit-text-size-adjust: 100%;
         }
 
-        .paper {
+        /* The page */
+        .notebook {
             position: relative;
-            width: 90%;
-            max-width: 800px;
-            min-width: 400px;
-            height: 97.5em;
+            display: flex;
+            flex-direction: column;
+            max-width: 820px;
+            min-height: calc(100vh - var(--gap) - 64px);
+            min-height: calc(100dvh - var(--gap) - 64px);
             margin: 0 auto;
-            background: #fff;
+            background: var(--paper);
             border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,.3);
-            overflow: hidden;
+            box-shadow: 0 2px 10px var(--shadow);
         }
-        .paper:before {
+        .notebook::before {
             content: '';
             position: absolute;
             top: 0; bottom: 0; left: 0;
-            width: 60px;
-            background: radial-gradient(#575450 6px, transparent 7px) repeat-y;
-            background-size: 30px 30px;
-            border-right: 3px solid #d4d4d4;
-            box-sizing: border-box;
+            width: var(--margin);
+            background: radial-gradient(circle, var(--desk) var(--hole), transparent calc(var(--hole) + 1px)) center top / 100% var(--line) repeat-y;
+            border-right: 2px solid var(--margin-rule);
+            border-radius: 10px 0 0 10px;
+            pointer-events: none;
         }
 
-        .paper-content {
-            position: absolute;
-            top: 30px; right: 0; bottom: 30px; left: 60px;
-            background: linear-gradient(transparent, transparent 28px, #d4d4d4 28px);
-            background-size: 30px 30px;
+        /* Page number and page flipping */
+        .page-header {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            height: calc(2 * var(--line));
+            padding: 0 6px 0 calc(var(--margin) + 4px);
+            border-bottom: 1px solid var(--rule);
         }
-
-        .content, .pagenum {
-            width: 100%;
-            max-width: 100%;
-            line-height: 30px;
-            padding: 0 10px;
+        .pagenum {
+            flex: 1;
+            min-width: 0;
+            height: 44px;
+            padding: 0 6px;
             border: 0;
+            border-radius: 8px;
             outline: 0;
             background: transparent;
-            color: black;
-            box-sizing: border-box;
-            z-index: 1;
-            resize: none;
-        }
-
-        .pagenum {
-            font-family: 'Roboto Slab', serif;
+            color: var(--ink);
+            font: 600 16px/1 'Roboto Slab', Georgia, serif;
             text-align: center;
-            margin: 0.5em 0;
-            padding-left: 70px;
+            text-overflow: ellipsis;
         }
+        .pagenum:focus { background: color-mix(in srgb, var(--rule) 45%, transparent); }
+        .flip {
+            flex: none;
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: var(--faded-ink);
+            font: 400 26px/1 'Roboto Slab', Georgia, serif;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .flip:hover:not(:disabled), .flip:focus-visible { background: color-mix(in srgb, var(--rule) 55%, transparent); color: var(--ink); outline: 0; }
+        .flip:active:not(:disabled) { transform: scale(.92); }
+        .flip:disabled { opacity: .3; cursor: default; }
+        .flip.dice { font-size: 22px; }
+        .flip.dice.rolling { animation: roll .45s ease-out; }
+        @keyframes roll { from { transform: rotate(-200deg) scale(.7); } to { transform: none; } }
 
-        .content {
-            margin-top: 0.45em;
-            font-family: 'Handlee', cursive;
-            font-size: 18px;
-            font-weight: bold;
-            height: 100%;
-            max-height: 100%;
+        /* The ruled sheet */
+        .sheet {
+            flex: 1;
+            display: flex;
+            padding-left: var(--margin);
+            background: linear-gradient(to bottom, transparent calc(var(--line) - 1px), var(--rule) calc(var(--line) - 1px)) 0 0 / 100% var(--line);
+            border-radius: 0 0 10px 10px;
         }
+        .content {
+            display: block;
+            flex: 1;
+            width: 100%;
+            min-height: calc(8 * var(--line));
+            margin: 0;
+            padding: 5px 14px var(--line) 12px;
+            border: 0;
+            outline: 0;
+            resize: none;
+            overflow: hidden;
+            background: transparent;
+            color: var(--ink);
+            font: bold 18px/var(--line) 'Handlee', 'Comic Sans MS', cursive;
+        }
+        .content:read-only { cursor: default; }
+
+        /* The sticky note that says what is going on */
+        .note {
+            position: -webkit-sticky;
+            position: sticky;
+            bottom: max(14px, env(safe-area-inset-bottom));
+            z-index: 2;
+            align-self: center;
+            width: min(400px, calc(100% - var(--margin) - 20px));
+            margin: 0 0 14px var(--margin);
+            padding: 14px 16px 16px;
+            background: var(--note);
+            color: var(--note-ink);
+            border-radius: 2px 2px 18px 2px;
+            box-shadow: 0 8px 18px var(--shadow), inset 0 12px 10px -10px rgba(0, 0, 0, .12);
+            transform: rotate(-1.2deg);
+            font-size: 17px;
+            line-height: 1.35;
+            animation: stick .25s ease-out;
+        }
+        .note[hidden] { display: none; }
+        @keyframes stick { from { transform: rotate(-4deg) translateY(16px) scale(.96); opacity: 0; } }
+        .note-text { margin: 0; }
+        .note-action {
+            display: block;
+            width: 100%;
+            min-height: 44px;
+            margin-top: 12px;
+            padding: 8px 16px;
+            border: 0;
+            border-radius: 999px;
+            background: var(--note-ink);
+            color: var(--note);
+            font: bold 17px/1.2 'Handlee', 'Comic Sans MS', cursive;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .note-action:hover, .note-action:focus-visible { filter: brightness(1.35); outline: 0; }
+        .note-action:active { transform: scale(.98); }
+        .note-action[hidden] { display: none; }
+
+        /* A pencil drawing a line: the progress bar */
+        .pencil-track {
+            position: relative;
+            height: 26px;
+            margin-top: 6px;
+            border-bottom: 2px dashed color-mix(in srgb, var(--note-ink) 25%, transparent);
+        }
+        .pencil-track[hidden] { display: none; }
+        .pencil-line {
+            position: absolute;
+            left: 0; bottom: -2px;
+            width: var(--progress, 0%);
+            height: 3px;
+            border-radius: 3px;
+            background: var(--note-ink);
+            transition: width .25s ease-out;
+        }
+        .pencil {
+            position: absolute;
+            left: var(--progress, 0%);
+            bottom: -1px;
+            margin-left: -10px;     /* the pencil sits on the end of its line */
+            font-size: 20px;
+            line-height: 1;
+            transition: left .25s ease-out;
+            animation: write .5s ease-in-out infinite alternate;
+            transform-origin: 0 100%;
+        }
+        @keyframes write { from { transform: rotate(-5deg); } to { transform: rotate(7deg) translateY(-1px); } }
+        /* Unknown amount of work: scribble back and forth. */
+        .pencil-track.scribble .pencil-line { width: 100%; opacity: .25; transition: none; }
+        .pencil-track.scribble .pencil { transition: none; animation: scribble 1.6s ease-in-out infinite alternate, write .3s ease-in-out infinite alternate; }
+        @keyframes scribble { from { left: 10px; } to { left: calc(100% - 10px); } }
 
         footer {
-            margin-top: 30px;
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 14px 8px calc(14px + env(safe-area-inset-bottom));
+            color: var(--faded-ink);
+            font-size: 14px;
             text-align: center;
-            font-size: 12px;
-            color: rgba(0,0,0,.6);
         }
-        footer a {
-            {{/* color: rgba(255,255,255,.8); */}}
-        }
-        .gh {
-            fill: #0E1117;
-            color: #f2f2f2;
-        }
-        @media (prefers-color-scheme: dark) {
-            body {
-                background: #0E1117;
-            }
-            .gh {
-                fill: #f2f2f2;
-                color: #0E1117;
-            }
-            .paper {
-                background: #161B22;
-            }
-            .content, .pagenum {
-                color: #C8D1D9;
-            }
-            .paper:before {
-                background: radial-gradient(#0E1117 6px, transparent 7px) repeat-y;
-                background-size: 30px 30px;
-                border-right: 3px solid #30363C;
-            }
-            .paper-content {
-                background: linear-gradient(transparent, transparent 28px, #30363C 28px);
-                background-size: 30px 30px;;
-            }
-        }
-        .colored {
-            color: red;
+        footer a { color: inherit; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .note, .pencil, .flip.dice.rolling, .pencil-track.scribble .pencil { animation: none; }
+            .pencil-line, .pencil { transition: none; }
         }
     </style>
 </head>
 
 <body>
-    <a href="https://github.com/simon446/infinity-notebook" class="github-corner" aria-label="View source on GitHub"><svg width="80" height="80" viewBox="0 0 250 250" class="gh" style="position: absolute; top: 0; border: 0; right: 0;" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a><style>.github-corner:hover .octo-arm{animation:octocat-wave 560ms ease-in-out}@keyframes octocat-wave{0%,100%{transform:rotate(0)}20%,60%{transform:rotate(-25deg)}40%,80%{transform:rotate(10deg)}}@media (max-width:500px){.github-corner:hover .octo-arm{animation:none}.github-corner .octo-arm{animation:octocat-wave 560ms ease-in-out}}</style>
-    <div class="paper">
-        <input id="pagenum" class="pagenum" onkeypress='return event.charCode >= 48 && event.charCode <= 57'>
-        <div class="paper-content">
-            <textarea id="content" class="content" autofocus></textarea>
+    <main class="notebook">
+        <header class="page-header">
+            <button id="previous" class="flip" type="button" aria-label="Previous page" title="Previous page">&lsaquo;</button>
+            <input id="pagenum" class="pagenum" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Page number" title="Type a page number">
+            <button id="next" class="flip" type="button" aria-label="Next page" title="Next page">&rsaquo;</button>
+            <button id="random" class="flip dice" type="button" aria-label="Random page" title="Random page">&#127922;</button>
+        </header>
+        <div class="sheet">
+            <textarea id="content" class="content" aria-label="Page text" spellcheck="false" autocapitalize="sentences"></textarea>
         </div>
-    </div>
+        <aside id="note" class="note" role="status" aria-live="polite" hidden>
+            <p id="note-text" class="note-text"></p>
+            <div id="note-progress" class="pencil-track" hidden>
+                <div class="pencil-line"></div>
+                <span class="pencil" aria-hidden="true">&#9999;&#65039;</span>
+            </div>
+            <button id="note-action" class="note-action" type="button" hidden></button>
+        </aside>
+    </main>
+    <footer>
+        Every page is already written. You are only finding it.
+        &middot; <a href="https://github.com/simon446/infinity-notebook">Source on GitHub</a>
+    </footer>
     <script type="module" src="./index.js"></script>
 </body>
 </html>

@@ -1,13 +1,13 @@
 # Infinity Notebook
 
-This notebook contains every piece of text that will ever exist (limited to 2000 Unicode characters).
+This notebook contains every piece of text that will ever exist (up to 2000 characters a page).
 
-Try to edit this text and press enter to search for that page in the notebook.
+Go on, try it: change this text and press Enter, or tap "Find this page". Your words are already written down somewhere in here, and the notebook will open on that page.
 
-To change the page number, click on the page number on top of the page and change it to whatever you like.
+Flip pages with the arrows, roll the dice for a random page, or tap the page number and type any number you like.
 
-To write multiline text, press Shift + Enter.
+For a new line on a keyboard, press Shift + Enter.
 
-The pages are sorted by a small language model (SmolLM2-135M) that runs in your browser: the less a text surprises it, the lower its page number. Your first search downloads the model (about 140 MB), so be patient.
+The first search fetches the notebook's index, which is rather heavy (about 135 MB), so give it a moment. Tidy, predictable writing is filed near the front. Gibberish is kept far, far in the back.
 
 (╯°□°）╯︵ ┻━┻
