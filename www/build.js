@@ -1,5 +1,5 @@
 // Collects the static site into dist/: the page, the Rust wasm package that
-// wasm-pack built into ../pkg, the language model and its runtime.
+// wasm-pack built into ../pkg, the language model's weights and the tokenizer.
 const fs = require("fs");
 const path = require("path");
 
@@ -26,13 +26,7 @@ for (const file of ["infinity_notebook.js", "infinity_notebook_bg.wasm"]) {
   copy(path.join("..", "pkg", file), path.join("pkg", file));
 }
 
-// The language model runtime. Its version is pinned in package.json: a
-// different build may round differently, which would change every page.
-for (const file of [
-  "onnxruntime-web/dist/ort.wasm.min.mjs",
-  "onnxruntime-web/dist/ort-wasm-simd-threaded.mjs",
-  "onnxruntime-web/dist/ort-wasm-simd-threaded.wasm",
-  "@huggingface/tokenizers/dist/tokenizers.min.mjs",
-]) {
-  copy(path.join("node_modules", file), path.join("vendor", path.basename(file)));
-}
+copy(
+  path.join("node_modules", "@huggingface/tokenizers/dist/tokenizers.min.mjs"),
+  path.join("vendor", "tokenizers.min.mjs")
+);

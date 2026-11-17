@@ -8,8 +8,7 @@
     "start": "npm run build && python3 -m http.server --directory dist 8080"
   },
   "dependencies": {
-    "@huggingface/tokenizers": "0.2.0",
-    "onnxruntime-web": "1.31.1"
+    "@huggingface/tokenizers": "0.2.0"
   },
   "devDependencies": {
     "binaryen": "130.0.0",

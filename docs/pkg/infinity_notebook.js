@@ -1,6 +1,37 @@
 /* @ts-self-types="./infinity_notebook.d.ts" */
 
 /**
+ * The language model, loaded from the bytes of its model file.
+ */
+export class Model {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        ModelFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_model_free(ptr, 0);
+    }
+    /**
+     * @param {Uint8Array | number[]} bytes
+     */
+    constructor(bytes) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.model_new(ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        this.__wbg_ptr = ret[0];
+        ModelFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+}
+if (Symbol.dispose) Model.prototype[Symbol.dispose] = Model.prototype.free;
+
+/**
  * Decodes a page number, one token at a time, back into its text.
  */
 export class PageDecoder {
@@ -22,35 +53,24 @@ export class PageDecoder {
     }
     /**
      * Returns nothing for pages 0 and 1, which are not model-coded.
+     * @param {Model} model
      * @param {string} page_number
-     * @param {number} eos
      * @returns {PageDecoder | undefined}
      */
-    static create(page_number, eos) {
-        const val2 = +eos;
+    static create(model, page_number) {
+        _assertClass(model, Model);
         const ptr0 = passStringToWasm0(page_number, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.pagedecoder_create(ptr0, len0, val2);
+        const ret = wasm.pagedecoder_create(model.__wbg_ptr, ptr0, len0);
         return ret === 0 ? undefined : PageDecoder.__wrap(ret);
     }
     /**
-     * True once the page number has no more tokens to give.
-     * @returns {boolean}
+     * The next token of the page, or nothing once the page has ended.
+     * @returns {number | undefined}
      */
-    exhausted() {
-        const ret = wasm.pagedecoder_exhausted(this.__wbg_ptr);
-        return ret !== 0;
-    }
-    /**
-     * The next token of the page, given the model's predictions for it.
-     * @param {Float32Array | number[]} logits
-     * @returns {number}
-     */
-    next(logits) {
-        const ptr0 = passArrayF32ToWasm0(logits, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.pagedecoder_next(this.__wbg_ptr, ptr0, len0);
-        return ret >>> 0;
+    next() {
+        const ret = wasm.pagedecoder_next(this.__wbg_ptr);
+        return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
     }
 }
 if (Symbol.dispose) PageDecoder.prototype[Symbol.dispose] = PageDecoder.prototype.free;
@@ -70,53 +90,38 @@ export class PageEncoder {
         wasm.__wbg_pageencoder_free(ptr, 0);
     }
     /**
-     * Ends the text, given the model's predictions for what follows it,
-     * and returns the page number in decimal.
-     * @param {Float32Array | number[]} logits
+     * Ends the text and returns the page number in decimal.
      * @returns {string}
      */
-    finish(logits) {
-        let deferred2_0;
-        let deferred2_1;
+    finish() {
+        let deferred1_0;
+        let deferred1_1;
         try {
-            let ptr, ptr0, len0;
-            try {
-                ptr = this.__destroy_into_raw();
-                ptr0 = passArrayF32ToWasm0(logits, wasm.__wbindgen_malloc);
-                len0 = WASM_VECTOR_LEN;
-            } catch (e) {
-                if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 4, 4); }
-                if (ptr) wasm.__wbg_pageencoder_free(ptr, 1);
-                throw e;
-            }
-            const ret = wasm.pageencoder_finish(ptr, ptr0, len0);
-            deferred2_0 = ret[0];
-            deferred2_1 = ret[1];
+            const ptr = this.__destroy_into_raw();
+            const ret = wasm.pageencoder_finish(ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
             return getStringFromWasm0(ret[0], ret[1]);
         } finally {
-            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
         }
     }
     /**
-     * `eos` is the model's end-of-text token.
-     * @param {number} eos
+     * @param {Model} model
      */
-    constructor(eos) {
-        const ret = wasm.pageencoder_new(eos);
+    constructor(model) {
+        _assertClass(model, Model);
+        const ret = wasm.pageencoder_new(model.__wbg_ptr);
         this.__wbg_ptr = ret;
         PageEncoderFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }
     /**
-     * `logits` are the model's predictions for the position of `token`.
-     * @param {Float32Array | number[]} logits
+     * Appends a token for which `is_text_token` holds.
      * @param {number} token
      */
-    push(logits, token) {
-        const val2 = +token;
-        const ptr0 = passArrayF32ToWasm0(logits, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        wasm.pageencoder_push(this.__wbg_ptr, ptr0, len0, val2);
+    push(token) {
+        wasm.pageencoder_push(this.__wbg_ptr, token);
     }
 }
 if (Symbol.dispose) PageEncoder.prototype[Symbol.dispose] = PageEncoder.prototype.free;
@@ -158,6 +163,16 @@ export function init() {
 }
 
 /**
+ * True for tokens that can be part of a page's text.
+ * @param {number} token
+ * @returns {boolean}
+ */
+export function is_text_token(token) {
+    const ret = wasm.is_text_token(token);
+    return ret !== 0;
+}
+
+/**
  * @param {string} string
  * @returns {string}
  */
@@ -178,6 +193,10 @@ export function limit_string_length(string) {
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
+        __wbg_Error_208446807d0d1e30: function(arg0, arg1) {
+            const ret = Error(getStringFromWasm0(arg0, arg1));
+            return ret;
+        },
         __wbg___wbindgen_throw_4c88d8bf264fd984: function(arg0, arg1) {
             throw new Error(getStringFromWasm0(arg0, arg1));
         },
@@ -218,6 +237,9 @@ function __wbg_get_imports() {
     };
 }
 
+const ModelFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_model_free(ptr, 1));
 const PageDecoderFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_pagedecoder_free(ptr, 1));
@@ -225,20 +247,18 @@ const PageEncoderFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_pageencoder_free(ptr, 1));
 
+function _assertClass(instance, klass) {
+    if (!(instance instanceof klass)) {
+        throw new Error(`expected instance of ${klass.name}`);
+    }
+}
+
 let cachedDataViewMemory0 = null;
 function getDataViewMemory0() {
     if (cachedDataViewMemory0 === null || cachedDataViewMemory0.buffer.detached === true || (cachedDataViewMemory0.buffer.detached === undefined && cachedDataViewMemory0.buffer !== wasm.memory.buffer)) {
         cachedDataViewMemory0 = new DataView(wasm.memory.buffer);
     }
     return cachedDataViewMemory0;
-}
-
-let cachedFloat32ArrayMemory0 = null;
-function getFloat32ArrayMemory0() {
-    if (cachedFloat32ArrayMemory0 === null || cachedFloat32ArrayMemory0.byteLength === 0) {
-        cachedFloat32ArrayMemory0 = new Float32Array(wasm.memory.buffer);
-    }
-    return cachedFloat32ArrayMemory0;
 }
 
 function getStringFromWasm0(ptr, len) {
@@ -254,9 +274,9 @@ function getUint8ArrayMemory0() {
     return cachedUint8ArrayMemory0;
 }
 
-function passArrayF32ToWasm0(arg, malloc) {
-    const ptr = malloc(arg.length * 4, 4) >>> 0;
-    getFloat32ArrayMemory0().set(arg, ptr / 4);
+function passArray8ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 1, 1) >>> 0;
+    getUint8ArrayMemory0().set(arg, ptr / 1);
     WASM_VECTOR_LEN = arg.length;
     return ptr;
 }
@@ -298,6 +318,12 @@ function passStringToWasm0(arg, malloc, realloc) {
     return ptr;
 }
 
+function takeFromExternrefTable0(idx) {
+    const value = wasm.__wbindgen_externrefs.get(idx);
+    wasm.__externref_table_dealloc(idx);
+    return value;
+}
+
 let cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true });
 cachedTextDecoder.decode();
 const MAX_SAFARI_DECODE_BYTES = 2146435072;
@@ -333,7 +359,6 @@ function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     wasmModule = module;
     cachedDataViewMemory0 = null;
-    cachedFloat32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
     return wasm;

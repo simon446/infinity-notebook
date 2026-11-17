@@ -11,11 +11,18 @@ arithmetic coder (`src/coder.rs`) spends about `-log2(probability)` bits on it. 
 bits are the page number (the `#p123...` in the URL), so text the model finds likely lands
 on low page numbers.
 
-The model is bundled in `www/model` (8-bit ONNX weights, split into parts below GitHub's
-file size limit) and runs in the browser through `onnxruntime-web`. Decoding a page needs
-exactly the numbers that were produced when it was encoded, so the model runs on the CPU in
-single-threaded WebAssembly, one token at a time. Changing the model file, the tokenizer or
-the `onnxruntime-web` version renumbers every page.
+Decoding a page needs exactly the numbers that were produced when it was encoded, on every
+device. So the model does not run on a general runtime or a GPU but in `src/model.rs`, a
+small engine for this one model: the matrix products are exact integer arithmetic (8-bit
+weights, WebAssembly SIMD) and the rest is float arithmetic in a fixed order. `tests/golden.rs`
+pins a known page; if it fails, a change has renumbered every page.
+
+The weights are bundled in `www/model`, split into parts below GitHub's file size limit.
+They are made from the original model with
+
+```
+python3 tools/convert_weights.py model.safetensors www/model
+```
 
 ## Building
 
@@ -32,4 +39,4 @@ Actions runs this build and commits the result to `docs/`, which GitHub Pages se
 
 - <a href="https://codepen.io/MarcMalignan/pen/QbaXGg">Paper Styling by Marc Malignan</a>
 - https://github.com/3b1b/videos
-- [SmolLM2-135M](https://huggingface.co/HuggingFaceTB/SmolLM2-135M) by Hugging Face (Apache-2.0), ONNX weights from [onnx-community](https://huggingface.co/onnx-community/SmolLM2-135M-ONNX)
+- [SmolLM2-135M](https://huggingface.co/HuggingFaceTB/SmolLM2-135M) by Hugging Face (Apache-2.0)

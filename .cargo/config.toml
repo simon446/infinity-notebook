@@ -1,0 +1,3 @@
+# The language model uses WebAssembly SIMD, which every current browser has.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

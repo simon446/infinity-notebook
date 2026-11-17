@@ -1,5 +1,8 @@
-mod coder;
+pub mod coder;
+pub mod model;
 mod utils;
+
+use std::rc::Rc;
 
 use num_bigint::BigUint;
 use substring::Substring;
@@ -127,59 +130,98 @@ fn biguint_to_words(number: BigUint) -> String {
 }
 
 // Page 0 does not exist and page 1 is the fixed welcome page. Every other page
-// number, minus one, is an arithmetic code (see coder.rs) for the page's text.
+// number, minus one, is an arithmetic code (see coder.rs) for the page's text
+// under the language model in model.rs.
+
+/// The language model, loaded from the bytes of its model file.
+#[wasm_bindgen]
+pub struct Model {
+    model: Rc<model::Model>,
+}
+
+#[wasm_bindgen]
+impl Model {
+    #[wasm_bindgen(constructor)]
+    pub fn new(bytes: Vec<u8>) -> Result<Model, JsError> {
+        let model = model::Model::new(bytes).map_err(|message| JsError::new(&message))?;
+        Ok(Model { model: Rc::new(model) })
+    }
+}
+
+fn new_context(model: &Model) -> model::Context {
+    let mut context = model::Context::new(Rc::clone(&model.model));
+    // The end-of-text token doubles as the start marker.
+    context.feed(model::EOS);
+    context
+}
+
+/// True for tokens that can be part of a page's text.
+#[wasm_bindgen]
+pub fn is_text_token(token: u32) -> bool {
+    token >= model::SPECIAL_TOKENS && (token as usize) < model::VOCAB
+}
 
 /// Encodes a text, one token at a time, into its page number.
 #[wasm_bindgen]
 pub struct PageEncoder {
+    context: model::Context,
     encoder: coder::Encoder,
 }
 
 #[wasm_bindgen]
 impl PageEncoder {
-    /// `eos` is the model's end-of-text token.
     #[wasm_bindgen(constructor)]
-    pub fn new(eos: u32) -> PageEncoder {
-        PageEncoder { encoder: coder::Encoder::new(eos) }
+    pub fn new(model: &Model) -> PageEncoder {
+        PageEncoder { context: new_context(model), encoder: coder::Encoder::new(model::EOS) }
     }
 
-    /// `logits` are the model's predictions for the position of `token`.
-    pub fn push(&mut self, logits: &[f32], token: u32) {
-        self.encoder.push(logits, token);
+    /// Appends a token for which `is_text_token` holds.
+    pub fn push(&mut self, token: u32) {
+        self.encoder.push(self.context.logits(), token);
+        self.context.feed(token);
     }
 
-    /// Ends the text, given the model's predictions for what follows it,
-    /// and returns the page number in decimal.
-    pub fn finish(self, logits: &[f32]) -> String {
-        (self.encoder.finish(logits) + 1u32).to_str_radix(10)
+    /// Ends the text and returns the page number in decimal.
+    pub fn finish(self) -> String {
+        (self.encoder.finish(self.context.logits()) + 1u32).to_str_radix(10)
     }
 }
 
 /// Decodes a page number, one token at a time, back into its text.
 #[wasm_bindgen]
 pub struct PageDecoder {
+    context: model::Context,
     decoder: coder::Decoder,
+    finished: bool,
 }
 
 #[wasm_bindgen]
 impl PageDecoder {
     /// Returns nothing for pages 0 and 1, which are not model-coded.
-    pub fn create(page_number: String, eos: u32) -> Option<PageDecoder> {
+    pub fn create(model: &Model, page_number: String) -> Option<PageDecoder> {
         let page_number = BigUint::parse_bytes(page_number.as_bytes(), 10)?;
         if page_number < BigUint::from(2u32) {
             return None;
         }
-        Some(PageDecoder { decoder: coder::Decoder::new(&(page_number - 1u32), eos) })
+        Some(PageDecoder {
+            context: new_context(model),
+            decoder: coder::Decoder::new(&(page_number - 1u32), model::EOS),
+            finished: false,
+        })
     }
 
-    /// True once the page number has no more tokens to give.
-    pub fn exhausted(&self) -> bool {
-        self.decoder.exhausted()
-    }
-
-    /// The next token of the page, given the model's predictions for it.
-    pub fn next(&mut self, logits: &[f32]) -> u32 {
-        self.decoder.next(logits)
+    /// The next token of the page, or nothing once the page has ended.
+    pub fn next(&mut self) -> Option<u32> {
+        if self.finished || self.decoder.exhausted() {
+            return None;
+        }
+        let token = self.decoder.next(self.context.logits());
+        if !is_text_token(token) {
+            self.finished = true;
+            return None;
+        }
+        self.context.feed(token);
+        Some(token)
     }
 }
 

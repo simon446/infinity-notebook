@@ -1,0 +1,12 @@
+{
+  "parts": [
+    {
+      "file": "model.bin.part00",
+      "size": 94371840
+    },
+    {
+      "file": "model.bin.part01",
+      "size": 41067272
+    }
+  ]
+}

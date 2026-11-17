@@ -15,8 +15,7 @@ let busy = false;        // the language model is reading or searching
 let job = {};            // the model work for the current page
 const knownPages = new Map([["1", wasm.first_page()]]);
 
-// Starting the model takes close to 1 GB of memory.
-const MODEL_FAILED = "Could not load model (needs ~1 GB of memory)";
+const MODEL_FAILED = "Could not load the language model";
 
 // The language model is only fetched once a page actually needs it.
 let modelPromise;

@@ -1,37 +1,41 @@
 // Turns page numbers into text and back with SmolLM2-135M.
 //
 // The text of a page is arithmetic coded with the model's next-token
-// predictions (the coder lives in src/coder.rs). Decoding only works if the
-// model produces exactly the same numbers as when the page was encoded, on
-// every machine. So the model always runs one token at a time, on the CPU,
-// in single-threaded WebAssembly, with a pinned onnxruntime-web build.
+// predictions. Both the model (src/model.rs) and the coder (src/coder.rs) run
+// in the infinity-notebook wasm module, written so that every machine gets
+// exactly the same numbers. This file adds the tokenizer and the downloads.
 
-export const EOS = 0; // <|endoftext|>
-const SPECIAL_TOKENS = 17; // ids below this are special tokens, never text
 export const MAX_TEXT_LENGTH = 2000;
+
+// Bump when the files in model/ change, so browsers drop their stored copies.
+const MODEL_CACHE = "infinity-notebook-model-v3";
+
+/** Lets the browser handle input and repaint between tokens. */
+const channel = new MessageChannel();
+let resume = () => {};
+channel.port1.onmessage = () => resume();
+function pause() {
+  return new Promise((resolve) => {
+    resume = resolve;
+    channel.port2.postMessage(0);
+  });
+}
 
 export class LanguageModel {
   /**
-   * @param ort the onnxruntime-web module
-   * @param session an ort.InferenceSession for the SmolLM2-135M ONNX model
+   * @param wasm the infinity-notebook wasm module
+   * @param model a wasm.Model
    * @param tokenizer a @huggingface/tokenizers Tokenizer
-   * @param coder the infinity-notebook wasm module
    */
-  constructor(ort, session, tokenizer, coder) {
-    this.ort = ort;
-    this.session = session;
+  constructor(wasm, model, tokenizer) {
+    this.wasm = wasm;
+    this.model = model;
     this.tokenizer = tokenizer;
-    this.coder = coder;
-    // The empty key/value cache a context starts with, one pair per layer.
-    this.pastNames = session.inputNames.filter((name) => name.startsWith("past_key_values."));
-    const { shape } = session.inputMetadata.find((input) => input.name === this.pastNames[0]);
-    this.pastShape = [1, shape[1], 0, shape[3]];
-    this.usesPositions = session.inputNames.includes("position_ids");
   }
 
   tokenize(text) {
     const { ids } = this.tokenizer.encode(text, { add_special_tokens: false });
-    return ids.filter((id) => id >= SPECIAL_TOKENS);
+    return ids.filter((id) => this.wasm.is_text_token(id));
   }
 
   detokenize(tokens) {
@@ -44,55 +48,26 @@ export class LanguageModel {
   }
 
   /**
-   * A fresh context. Each call to the returned function feeds one token and
-   * resolves to the logits for the token after it.
-   */
-  predictor() {
-    const { ort, session } = this;
-    let past = {};
-    for (const name of this.pastNames) {
-      past[name] = new ort.Tensor("float32", new Float32Array(0), this.pastShape);
-    }
-    let position = 0;
-    return async (token) => {
-      const feeds = {
-        input_ids: new ort.Tensor("int64", BigInt64Array.from([BigInt(token)]), [1, 1]),
-        attention_mask: new ort.Tensor("int64", new BigInt64Array(position + 1).fill(1n), [1, position + 1]),
-        ...past,
-      };
-      if (this.usesPositions) {
-        feeds.position_ids = new ort.Tensor("int64", BigInt64Array.from([BigInt(position)]), [1, 1]);
-      }
-      const outputs = await session.run(feeds);
-      for (const tensor of Object.values(past)) tensor.dispose?.();
-      past = {};
-      for (const [name, tensor] of Object.entries(outputs)) {
-        if (name.startsWith("present.")) past[name.replace("present.", "past_key_values.")] = tensor;
-      }
-      position += 1;
-      return outputs.logits.data;
-    };
-  }
-
-  /**
    * The page number (decimal string) of `text`.
    * @param onProgress called with (tokens done, tokens in total)
    * @param signal set `signal.aborted` to give up; the promise then rejects
    */
   async encode(text, onProgress = () => {}, signal = {}) {
     const tokens = this.tokenize(text);
-    const predict = this.predictor();
-    const encoder = new this.coder.PageEncoder(EOS);
-    // The end-of-text token doubles as the start marker.
-    let logits = await predict(EOS);
-    for (let i = 0; i < tokens.length; i++) {
-      if (signal.aborted) throw new Error("aborted");
-      onProgress(i, tokens.length);
-      encoder.push(logits, tokens[i]);
-      logits = await predict(tokens[i]);
+    const encoder = new this.wasm.PageEncoder(this.model);
+    try {
+      for (let i = 0; i < tokens.length; i++) {
+        onProgress(i, tokens.length);
+        await pause();
+        if (signal.aborted) throw new Error("aborted");
+        encoder.push(tokens[i]);
+      }
+    } catch (error) {
+      encoder.free();
+      throw error;
     }
     onProgress(tokens.length, tokens.length);
-    return encoder.finish(logits);
+    return encoder.finish();
   }
 
   /**
@@ -101,33 +76,30 @@ export class LanguageModel {
    * @param signal set `signal.aborted` to give up; the promise then rejects
    */
   async decode(pageNumber, onText = () => {}, signal = {}) {
-    const decoder = this.coder.PageDecoder.create(pageNumber, EOS);
+    const decoder = this.wasm.PageDecoder.create(this.model, pageNumber);
     if (!decoder) return undefined;
-    const predict = this.predictor();
     const tokens = [];
     let text = "";
-    let previous = EOS;
-    while (!decoder.exhausted()) {
-      if (signal.aborted) throw new Error("aborted");
-      const token = decoder.next(await predict(previous));
-      if (token < SPECIAL_TOKENS) break;
-      tokens.push(token);
-      const longer = this.detokenize(tokens);
-      if (longer.length > MAX_TEXT_LENGTH) break;
-      text = longer;
-      previous = token;
-      onText(text);
+    try {
+      for (;;) {
+        await pause();
+        if (signal.aborted) throw new Error("aborted");
+        const token = decoder.next();
+        if (token === undefined) break;
+        tokens.push(token);
+        const longer = this.detokenize(tokens);
+        if (longer.length > MAX_TEXT_LENGTH) break;
+        text = longer;
+        onText(text);
+      }
+    } finally {
+      decoder.free();
     }
-    decoder.free();
     return text;
   }
 }
 
-// Bump when the files in model/ or the onnxruntime-web version change, so
-// browsers drop their stored copies.
-const MODEL_CACHE = "infinity-notebook-model-v2";
-
-/** Browser storage for the model and its runtime, if this browser offers any. */
+/** Browser storage for the model, if this browser offers any. */
 async function openModelCache() {
   try {
     for (const name of await caches.keys()) {
@@ -227,20 +199,15 @@ export async function fetchParts(url, cache, onProgress = () => {}) {
  * Loads the model from the files next to this module.
  * @param onProgress called with (bytes done, bytes in total) while downloading
  */
-export async function loadLanguageModel(coder, onProgress = () => {}) {
+export async function loadLanguageModel(wasm, onProgress = () => {}) {
   const file = (path) => new URL(path, import.meta.url).href;
   const cache = await openModelCache();
-  const [ort, { Tokenizer }, runtime, tokenizerJson, tokenizerConfig, model] = await Promise.all([
-    import("./vendor/ort.wasm.min.mjs"),
+  const [{ Tokenizer }, tokenizerJson, tokenizerConfig, weights] = await Promise.all([
     import("./vendor/tokenizers.min.mjs"),
-    cachedFetch(cache, file("vendor/ort-wasm-simd-threaded.wasm")).then((r) => r.arrayBuffer()),
     cachedFetch(cache, file("model/tokenizer.json")).then((r) => r.json()),
     cachedFetch(cache, file("model/tokenizer_config.json")).then((r) => r.json()),
-    fetchParts(file("model/model_int8.onnx"), cache, onProgress),
+    fetchParts(file("model/model.bin"), cache, onProgress),
   ]);
-  ort.env.wasm.wasmPaths = file("vendor/");
-  ort.env.wasm.wasmBinary = runtime;
-  ort.env.wasm.numThreads = 1;
-  const session = await ort.InferenceSession.create(model, { executionProviders: ["wasm"] });
-  return new LanguageModel(ort, session, new Tokenizer(tokenizerJson, tokenizerConfig), coder);
+  await pause();
+  return new LanguageModel(wasm, new wasm.Model(weights), new Tokenizer(tokenizerJson, tokenizerConfig));
 }
