@@ -89,7 +89,10 @@ export class LanguageModel {
         tokens.push(token);
         const longer = this.detokenize(tokens);
         if (longer.length > MAX_TEXT_LENGTH) break;
-        text = longer;
+        // A character can span several tokens. Until its last one arrives it
+        // reads as a broken character, which is left out of the text. A page
+        // can also end in the middle of a character.
+        text = longer.replace(/\uFFFD+$/, "");
         onText(text);
       }
     } finally {
