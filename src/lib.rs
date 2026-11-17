@@ -1,39 +1,12 @@
-#[macro_use]
-extern crate lazy_static;
-
+mod coder;
 mod utils;
-use std::{fmt::Error, ops::{Shl, Shr}};
-
-extern crate base64;
-
-use substring::Substring;
 
 use num_bigint::BigUint;
-use std::panic;
-
+use substring::Substring;
 use wasm_bindgen::prelude::*;
-
-mod smaz;
-use smaz::{compress,decompress};
 
 static PAGE1: &str = include_str!("page1.txt");
 static MAX_STRING_LENGTH: usize = 2000;
-
-// When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
-// allocator.
-#[cfg(feature = "wee_alloc")]
-#[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
-#[wasm_bindgen]
-extern {
-    #[wasm_bindgen(js_namespace = console)]
-    fn log(s: &str);
-}
-
-macro_rules! log {
-    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
-}
 
 #[wasm_bindgen]
 pub fn init() {
@@ -153,107 +126,71 @@ fn biguint_to_words(number: BigUint) -> String {
     format!("{} {}", number_string_with_spaces, suffix_str)
 }
 
-fn text_to_page_number(text: String) -> BigUint {
-    log!("Compare strings '{}' and '{}'", text, PAGE1);
-    if text.eq(&PAGE1) {
-        return BigUint::from(1 as u32);
-    }
-    // 1. Compress text to bytes
-    let compressed_text = compress(&text.as_bytes());
-    // 3. Interpret bytes as a BigUint
-    let compressed_text_number = BigUint::from_bytes_be(&compressed_text[..]);
-    // 4. Return the number of the page
-    compressed_text_number+BigUint::from(2 as u32)
+// Page 0 does not exist and page 1 is the fixed welcome page. Every other page
+// number, minus one, is an arithmetic code (see coder.rs) for the page's text.
+
+/// Encodes a text, one token at a time, into its page number.
+#[wasm_bindgen]
+pub struct PageEncoder {
+    encoder: coder::Encoder,
 }
 
-fn page_number_to_text(page_number: BigUint) -> Option<String> {
-    if page_number == BigUint::from(0 as u32) {
-        return None;
+#[wasm_bindgen]
+impl PageEncoder {
+    /// `eos` is the model's end-of-text token.
+    #[wasm_bindgen(constructor)]
+    pub fn new(eos: u32) -> PageEncoder {
+        PageEncoder { encoder: coder::Encoder::new(eos) }
     }
-    if page_number < BigUint::from(2 as u32) {
-        return Some(PAGE1.to_string());
+
+    /// `logits` are the model's predictions for the position of `token`.
+    pub fn push(&mut self, logits: &[f32], token: u32) {
+        self.encoder.push(logits, token);
     }
-    let mut page_number = page_number-BigUint::from(2 as u32);
-    // 2. Decompress bytes to text
-    loop {
-        let page_number_text = match decompress(&page_number.to_bytes_be()) {
-            Ok(page_number_text) => page_number_text,
-            Err(error) => {
-                log!("ERROR: decompress failed: {}", error);
-                page_number /= BigUint::from(2 as u32);
-                continue
-            }
-        };
-        // 3. Interpret text as a String
-        match String::from_utf8(page_number_text) {
-            Ok(page_number_text) => return Some(page_number_text),
-            Err(_) => {
-                page_number /= BigUint::from(2 as u32);
-                continue
-            }
-        };
-    }    
+
+    /// Ends the text, given the model's predictions for what follows it,
+    /// and returns the page number in decimal.
+    pub fn finish(self, logits: &[f32]) -> String {
+        (self.encoder.finish(logits) + 1u32).to_str_radix(10)
+    }
 }
 
-fn page_number_to_base64_string(page_number: BigUint) -> String {
-    base64::encode_config(page_number.to_bytes_be(), base64::URL_SAFE)
+/// Decodes a page number, one token at a time, back into its text.
+#[wasm_bindgen]
+pub struct PageDecoder {
+    decoder: coder::Decoder,
 }
 
-fn base64_string_to_page_number(base64_string: String) -> Option<BigUint> {
-   let page_number = match base64::decode_config(base64_string, base64::URL_SAFE) {
-        Ok(bytes) => BigUint::from_bytes_be(&bytes[..]),
-        Err(_) => return None
-    };
-    if page_number == BigUint::from(0 as u32) {
-        return None;
-    } else {
-        return Some(page_number);
+#[wasm_bindgen]
+impl PageDecoder {
+    /// Returns nothing for pages 0 and 1, which are not model-coded.
+    pub fn create(page_number: String, eos: u32) -> Option<PageDecoder> {
+        let page_number = BigUint::parse_bytes(page_number.as_bytes(), 10)?;
+        if page_number < BigUint::from(2u32) {
+            return None;
+        }
+        Some(PageDecoder { decoder: coder::Decoder::new(&(page_number - 1u32), eos) })
+    }
+
+    /// True once the page number has no more tokens to give.
+    pub fn exhausted(&self) -> bool {
+        self.decoder.exhausted()
+    }
+
+    /// The next token of the page, given the model's predictions for it.
+    pub fn next(&mut self, logits: &[f32]) -> u32 {
+        self.decoder.next(logits)
     }
 }
 
 #[wasm_bindgen]
-pub fn get_page(page_number: String) -> Option<String> {
-    let page_number = match BigUint::parse_bytes(page_number.as_bytes(), 10) {
-        Some(page_number) => page_number,
-        None => return None
-    };
-    let text = match page_number_to_text(page_number) {
-        Some(text) => text,
-        None => return None
-    };
-    Some(limit_string_length(text))
+pub fn first_page() -> String {
+    PAGE1.to_string()
 }
 
 #[wasm_bindgen]
 pub fn get_pagename(page_number: String) -> Option<String> {
-    let page_number = match BigUint::parse_bytes(page_number.as_bytes(), 10) {
-        Some(page_number) => page_number,
-        None => return None
-    };
-    Some(biguint_to_words(page_number))
-}
-
-#[wasm_bindgen]
-pub fn get_search(text: String) -> String {
-    let text = limit_string_length(text);
-    text_to_page_number(text).to_str_radix(10)
-}
-
-#[wasm_bindgen]
-pub fn page_number_to_base64(page_number: String) -> Option<String> {
-    let page_number = match BigUint::parse_bytes(page_number.as_bytes(), 10) {
-        Some(page_number) => page_number,
-        None => return None
-    };
-    Some(page_number_to_base64_string(page_number))
-}
-
-#[wasm_bindgen]
-pub fn base64_to_page_number(base64_string: String) -> Option<String> {
-    match base64_string_to_page_number(base64_string) {
-        Some(page_number) => Some(page_number.to_str_radix(10)),
-        None => None
-    }
+    BigUint::parse_bytes(page_number.as_bytes(), 10).map(biguint_to_words)
 }
 
 #[wasm_bindgen]

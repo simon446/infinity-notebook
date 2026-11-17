@@ -1,6 +1,5 @@
 /target
 **/*.rs.bk
-bin/
-pkg/
+/pkg/
 wasm-pack.log
 .DS_Store

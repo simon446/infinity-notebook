@@ -1,0 +1,12 @@
+{
+  "parts": [
+    {
+      "file": "model_int8.onnx.part00",
+      "size": 94371840
+    },
+    {
+      "file": "model_int8.onnx.part01",
+      "size": 41286514
+    }
+  ]
+}

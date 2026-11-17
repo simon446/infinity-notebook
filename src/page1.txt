@@ -8,4 +8,6 @@ To change the page number, click on the page number on top of the page and chang
 
 To write multiline text, press Shift + Enter.
 
+The pages are sorted by a small language model (SmolLM2-135M) that runs in your browser: the less a text surprises it, the lower its page number. Your first search downloads the model (about 140 MB), so be patient.
+
 (╯°□°）╯︵ ┻━┻
