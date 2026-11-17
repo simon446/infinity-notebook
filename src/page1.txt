@@ -9,5 +9,3 @@ Flip pages with the arrows, roll the dice for a random page, or type a page numb
 Predictable text is near the front. Gibberish is far in the back.
 
 The first search downloads about 135 MB.
-
-(╯°□°）╯︵ ┻━┻
