@@ -7,6 +7,7 @@
 use std::rc::Rc;
 
 use infinity_notebook::coder::{Decoder, Encoder};
+use infinity_notebook::{PageDecoder, PageEncoder};
 use infinity_notebook::model::{Context, Model, EOS, SPECIAL_TOKENS};
 use num_bigint::BigUint;
 
@@ -24,7 +25,7 @@ const TOKENS: &[u32] = &[
 /// Its arithmetic code; the page number is one more.
 const CODE: &str = "5641709378246156211764077360178999267515781706967594039080303113589219121587623673022558070957810488877";
 
-fn load_model() -> Rc<Model> {
+fn load_file() -> Vec<u8> {
     let directory = concat!(env!("CARGO_MANIFEST_DIR"), "/www/model");
     let mut file = Vec::new();
     for part in 0.. {
@@ -33,7 +34,24 @@ fn load_model() -> Rc<Model> {
             Err(_) => break,
         }
     }
-    Rc::new(Model::new(file).expect("www/model should hold the model file"))
+    file
+}
+
+fn load_model() -> Rc<Model> {
+    Rc::new(Model::new(load_file()).expect("www/model should hold the model file"))
+}
+
+fn encode(model: &infinity_notebook::Model, tokens: &[u32]) -> String {
+    let mut encoder = PageEncoder::new(model);
+    for &token in tokens {
+        encoder.push(token);
+    }
+    encoder.finish()
+}
+
+fn decode(model: &infinity_notebook::Model, page: &str) -> Vec<u32> {
+    let mut decoder = PageDecoder::create(model, page.to_string()).unwrap();
+    std::iter::from_fn(|| decoder.next()).collect()
 }
 
 fn new_context(model: &Rc<Model>) -> Context {
@@ -67,4 +85,36 @@ fn known_text_keeps_its_page() {
         context.feed(token);
     }
     assert_eq!(tokens, TOKENS);
+}
+
+/// Work on one text is reused for the next one where they start the same.
+/// That must never change a result, whatever was worked on before.
+#[test]
+fn remembered_text_changes_nothing() {
+    let model = infinity_notebook::Model::new(load_file()).ok().unwrap();
+    let page = (BigUint::parse_bytes(CODE.as_bytes(), 10).unwrap() + 1u32).to_str_radix(10);
+    let start = &TOKENS[..12];
+
+    // What each call should give, each time from a model that remembers nothing.
+    let fresh = |work: &dyn Fn(&infinity_notebook::Model) -> String| {
+        work(&infinity_notebook::Model::new(load_file()).ok().unwrap())
+    };
+    let show = |tokens: Vec<u32>| format!("{tokens:?}");
+    let neighbours: Vec<String> = [0u32, 1, 2, 1000]
+        .iter()
+        .map(|offset| (BigUint::parse_bytes(page.as_bytes(), 10).unwrap() + offset).to_str_radix(10))
+        .collect();
+    let mut changed = start.to_vec();
+    changed.extend([1137, 384, 856]);
+
+    assert_eq!(encode(&model, start), fresh(&|m| encode(m, start)));
+    for neighbour in neighbours.iter().chain(neighbours.iter().rev()) {
+        assert_eq!(show(decode(&model, neighbour)), fresh(&|m| show(decode(m, neighbour))), "page {neighbour}");
+    }
+    assert_eq!(encode(&model, &changed), fresh(&|m| encode(m, &changed)));
+    assert_eq!(encode(&model, start), fresh(&|m| encode(m, start)));
+    assert_eq!(encode(&model, &[]), fresh(&|m| encode(m, &[])));
+    assert_eq!(show(decode(&model, "2")), "[]");
+    assert_eq!(encode(&model, TOKENS), page);
+    assert_eq!(decode(&model, &page), TOKENS);
 }

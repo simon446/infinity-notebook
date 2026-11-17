@@ -106,6 +106,20 @@ impl Distribution {
     }
 }
 
+/// The slice of [0, 2^32) that `token` gets under the model's predictions
+/// `logits`, as (start, width). It only depends on the text before the token,
+/// so it can be kept and reused for another text that starts the same way.
+pub fn token_slice(logits: &[f32], eos: u32, token: u32) -> (u64, u64) {
+    Distribution::new(logits, eos).interval(token as usize)
+}
+
+/// The token whose slice contains `target`, and that slice.
+pub fn token_at(logits: &[f32], eos: u32, target: u64) -> (u32, (u64, u64)) {
+    let distribution = Distribution::new(logits, eos);
+    let token = distribution.find(target);
+    (token as u32, distribution.interval(token))
+}
+
 /// The interval `[low, low + range) / 2^(32 * steps)` of all points on the
 /// number line that start with the tokens seen so far.
 struct Interval {
@@ -137,7 +151,12 @@ impl Encoder {
     }
 
     pub fn push(&mut self, logits: &[f32], token: u32) {
-        let (start, freq) = Distribution::new(logits, self.eos).interval(token as usize);
+        let (start, freq) = token_slice(logits, self.eos, token);
+        self.narrow(start, freq);
+    }
+
+    /// Appends a token by its slice (see `token_slice`).
+    pub fn narrow(&mut self, start: u64, freq: u64) {
         self.interval.narrow(start, freq);
     }
 
@@ -201,14 +220,22 @@ impl Decoder {
     /// The next token, given the model's predictions for it. The caller stops
     /// at the end-of-text token or when the decoder is exhausted.
     pub fn next(&mut self, logits: &[f32]) -> u32 {
-        let distribution = Distribution::new(logits, self.eos);
+        let (token, (start, freq)) = token_at(logits, self.eos, self.target());
+        self.narrow(start, freq);
+        token
+    }
+
+    /// Where in [0, 2^32) the code points for the next token: the next token
+    /// is the one whose slice contains this.
+    pub fn target(&self) -> u64 {
         let scaled = (&self.value << (TOTAL_BITS * (self.interval.steps + 1))) >> self.bit_count;
         let offset = (scaled - (&self.interval.low << TOTAL_BITS)) / &self.interval.range;
-        let target = offset.iter_u64_digits().next().unwrap_or(0);
-        let token = distribution.find(target);
-        let (start, freq) = distribution.interval(token);
+        offset.iter_u64_digits().next().unwrap_or(0)
+    }
+
+    /// Moves past the next token, given its slice.
+    pub fn narrow(&mut self, start: u64, freq: u64) {
         self.interval.narrow(start, freq);
-        token as u32
     }
 }
 

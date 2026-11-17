@@ -288,6 +288,16 @@ impl Context {
         &self.logits
     }
 
+    /// Forgets everything after the first `positions` tokens that were fed.
+    /// The logits are stale until the next `feed`.
+    pub fn truncate(&mut self, positions: usize) {
+        assert!(positions <= self.position);
+        self.position = positions;
+        for cache in self.keys.iter_mut().chain(self.values.iter_mut()) {
+            cache.truncate(positions * KV_DIM);
+        }
+    }
+
     /// Feeds one token.
     pub fn feed(&mut self, token: u32) {
         let model = Rc::clone(&self.model);

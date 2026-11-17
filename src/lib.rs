@@ -2,6 +2,7 @@ pub mod coder;
 pub mod model;
 mod utils;
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use num_bigint::BigUint;
@@ -133,10 +134,47 @@ fn biguint_to_words(number: BigUint) -> String {
 // number, minus one, is an arithmetic code (see coder.rs) for the page's text
 // under the language model in model.rs.
 
+/// One token of the text the model last worked on, with the slice of the
+/// number line it got (see `coder::token_slice`).
+struct Step {
+    token: u32,
+    start: u64,
+    freq: u64,
+}
+
+/// The text the model last worked on. Running the model is the slow part, and
+/// the next text usually starts the same way: the neighbouring page when
+/// flipping, or the same words with a new ending when editing. Whatever the
+/// two have in common is not run through the model again.
+struct Memory {
+    /// Has been fed the start marker and the tokens of `steps`.
+    context: model::Context,
+    steps: Vec<Step>,
+}
+
+impl Memory {
+    /// Forgets all but the first `count` tokens.
+    fn rewind(&mut self, count: usize) {
+        if count >= self.steps.len() {
+            return;
+        }
+        self.steps.truncate(count);
+        // Feed the last remaining token again to get the logits after it.
+        self.context.truncate(count);
+        self.context.feed(self.steps.last().map_or(model::EOS, |step| step.token));
+    }
+
+    /// Appends a token to the text.
+    fn push(&mut self, token: u32, start: u64, freq: u64) {
+        self.context.feed(token);
+        self.steps.push(Step { token, start, freq });
+    }
+}
+
 /// The language model, loaded from the bytes of its model file.
 #[wasm_bindgen]
 pub struct Model {
-    model: Rc<model::Model>,
+    memory: Rc<RefCell<Memory>>,
 }
 
 #[wasm_bindgen]
@@ -144,15 +182,11 @@ impl Model {
     #[wasm_bindgen(constructor)]
     pub fn new(bytes: Vec<u8>) -> Result<Model, JsError> {
         let model = model::Model::new(bytes).map_err(|message| JsError::new(&message))?;
-        Ok(Model { model: Rc::new(model) })
+        let mut context = model::Context::new(Rc::new(model));
+        // The end-of-text token doubles as the start marker.
+        context.feed(model::EOS);
+        Ok(Model { memory: Rc::new(RefCell::new(Memory { context, steps: Vec::new() })) })
     }
-}
-
-fn new_context(model: &Model) -> model::Context {
-    let mut context = model::Context::new(Rc::clone(&model.model));
-    // The end-of-text token doubles as the start marker.
-    context.feed(model::EOS);
-    context
 }
 
 /// True for tokens that can be part of a page's text.
@@ -164,34 +198,54 @@ pub fn is_text_token(token: u32) -> bool {
 /// Encodes a text, one token at a time, into its page number.
 #[wasm_bindgen]
 pub struct PageEncoder {
-    context: model::Context,
+    memory: Rc<RefCell<Memory>>,
     encoder: coder::Encoder,
+    /// How many tokens have been pushed.
+    count: usize,
 }
 
 #[wasm_bindgen]
 impl PageEncoder {
     #[wasm_bindgen(constructor)]
     pub fn new(model: &Model) -> PageEncoder {
-        PageEncoder { context: new_context(model), encoder: coder::Encoder::new(model::EOS) }
+        PageEncoder {
+            memory: Rc::clone(&model.memory),
+            encoder: coder::Encoder::new(model::EOS),
+            count: 0,
+        }
     }
 
     /// Appends a token for which `is_text_token` holds.
     pub fn push(&mut self, token: u32) {
-        self.encoder.push(self.context.logits(), token);
-        self.context.feed(token);
+        let mut memory = self.memory.borrow_mut();
+        let (start, freq) = match memory.steps.get(self.count) {
+            Some(step) if step.token == token => (step.start, step.freq),
+            _ => {
+                memory.rewind(self.count);
+                let (start, freq) = coder::token_slice(memory.context.logits(), model::EOS, token);
+                memory.push(token, start, freq);
+                (start, freq)
+            }
+        };
+        self.encoder.narrow(start, freq);
+        self.count += 1;
     }
 
     /// Ends the text and returns the page number in decimal.
     pub fn finish(self) -> String {
-        (self.encoder.finish(self.context.logits()) + 1u32).to_str_radix(10)
+        let mut memory = self.memory.borrow_mut();
+        memory.rewind(self.count);
+        (self.encoder.finish(memory.context.logits()) + 1u32).to_str_radix(10)
     }
 }
 
 /// Decodes a page number, one token at a time, back into its text.
 #[wasm_bindgen]
 pub struct PageDecoder {
-    context: model::Context,
+    memory: Rc<RefCell<Memory>>,
     decoder: coder::Decoder,
+    /// How many tokens have been returned.
+    count: usize,
     finished: bool,
 }
 
@@ -204,8 +258,9 @@ impl PageDecoder {
             return None;
         }
         Some(PageDecoder {
-            context: new_context(model),
+            memory: Rc::clone(&model.memory),
             decoder: coder::Decoder::new(&(page_number - 1u32), model::EOS),
+            count: 0,
             finished: false,
         })
     }
@@ -215,12 +270,27 @@ impl PageDecoder {
         if self.finished || self.decoder.exhausted() {
             return None;
         }
-        let token = self.decoder.next(self.context.logits());
-        if !is_text_token(token) {
-            self.finished = true;
-            return None;
-        }
-        self.context.feed(token);
+        let mut memory = self.memory.borrow_mut();
+        let target = self.decoder.target();
+        let token = match memory.steps.get(self.count) {
+            // Still the same text as last time.
+            Some(step) if (step.start..step.start + step.freq).contains(&target) => {
+                self.decoder.narrow(step.start, step.freq);
+                step.token
+            }
+            _ => {
+                memory.rewind(self.count);
+                let (token, (start, freq)) = coder::token_at(memory.context.logits(), model::EOS, target);
+                if !is_text_token(token) {
+                    self.finished = true;
+                    return None;
+                }
+                self.decoder.narrow(start, freq);
+                memory.push(token, start, freq);
+                token
+            }
+        };
+        self.count += 1;
         Some(token)
     }
 }
