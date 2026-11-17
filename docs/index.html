@@ -162,37 +162,6 @@
         }
         .content:read-only { cursor: default; }
 
-        /* What changed since the previous page, drawn behind the text. It has
-           the text's exact layout, so each mark sits under its words. */
-        .page {
-            position: relative;
-            flex: 1;
-            display: flex;
-            min-width: 0;
-        }
-        .changes {
-            position: absolute;
-            inset: 0;
-            margin: 0;
-            padding: 5px 14px var(--line) 12px;
-            color: transparent;
-            font: bold 18px/var(--line) 'Handlee', 'Comic Sans MS', cursive;
-            white-space: pre-wrap;
-            overflow-wrap: break-word;
-            pointer-events: none;
-            user-select: none;
-        }
-        .changes mark {
-            color: transparent;
-            background: transparent;
-            border-radius: 4px;
-            animation: fresh-ink 1.6s ease-out;
-        }
-        @keyframes fresh-ink {
-            from, 25% { background: color-mix(in srgb, var(--accent) 35%, transparent); }
-        }
-        .content { position: relative; }
-
         /* The sticky note that says what is going on */
         .note {
             position: -webkit-sticky;
@@ -293,10 +262,7 @@
             <button id="random" class="flip dice" type="button" aria-label="Random page" title="Random page">&#127922;</button>
         </header>
         <div id="sheet" class="sheet">
-            <div class="page">
-                <div id="changes" class="changes" aria-hidden="true"></div>
-                <textarea id="content" class="content" aria-label="Page text" spellcheck="false" autocapitalize="sentences"></textarea>
-            </div>
+            <textarea id="content" class="content" aria-label="Page text" spellcheck="false" autocapitalize="sentences"></textarea>
         </div>
         <aside id="note" class="note" role="status" aria-live="polite" hidden>
             <p id="note-text" class="note-text"></p>

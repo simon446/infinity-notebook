@@ -10,7 +10,6 @@ const previousButton = document.getElementById('previous');
 const nextButton = document.getElementById('next');
 const randomButton = document.getElementById('random');
 const sheet = document.getElementById('sheet');
-const changes = document.getElementById('changes');
 const note = document.getElementById('note');
 const noteText = document.getElementById('note-text');
 const noteProgress = document.getElementById('note-progress');
@@ -159,26 +158,6 @@ function fitPaper() {
     paper.style.height = paper.scrollHeight + 'px';
 }
 
-/**
- * Marks what differs between the text that was on the page and the text that
- * is on it now, so that flipping to a similar page shows what changed. The
- * mark is drawn behind the text and fades away.
- */
-function showChange(before, after) {
-    changes.textContent = "";
-    if (before === after) return;
-    const shortest = Math.min(before.length, after.length);
-    let start = 0;
-    while (start < shortest && before[start] === after[start]) start++;
-    let end = 0;
-    while (end < shortest - start && before[before.length - 1 - end] === after[after.length - 1 - end]) end++;
-    // Nothing in common: a different page altogether, with nothing to point at.
-    if (start === 0 && end === 0) return;
-    const mark = document.createElement('mark');
-    mark.textContent = after.slice(start, after.length - end);
-    changes.append(after.slice(0, start), mark, after.slice(after.length - end));
-}
-
 // Pages live in the URL as #p<page number>.
 function pageNumberFromHash() {
     const match = /^#p(\d+)$/.exec(window.location.hash);
@@ -219,7 +198,6 @@ async function showPage() {
     // What is on the page stays there until the new page differs from it, so
     // that flipping between similar pages does not flicker.
     const before = paper.value;
-    changes.textContent = "";
 
     if (!knownPages.has(number)) {
         busy = true;
@@ -258,7 +236,6 @@ async function showPage() {
     busy = false;
     pageContent = knownPages.get(number);
     write(pageContent);
-    showChange(before, pageContent);
     paper.readOnly = false;
     if (justFound === number) {
         showNote(pageContent === "" ? "Found it! The one blank page in the whole notebook." : "Found it! It was on this page all along.", { seconds: 4 });
@@ -319,7 +296,6 @@ paper.addEventListener('keydown', function (e) {
 });
 
 paper.addEventListener('input', function () {
-    changes.textContent = "";
     if (busy) return;
     const limited = wasm.limit_string_length(paper.value);
     if (limited !== paper.value) paper.value = limited;
