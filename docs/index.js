@@ -10,6 +10,7 @@ const previousButton = document.getElementById('previous');
 const nextButton = document.getElementById('next');
 const randomButton = document.getElementById('random');
 const sheet = document.getElementById('sheet');
+const changes = document.getElementById('changes');
 const note = document.getElementById('note');
 const noteText = document.getElementById('note-text');
 const noteProgress = document.getElementById('note-progress');
@@ -45,12 +46,6 @@ const MESSAGES = {
         "Skipping a few trillion pages",
     ],
     closing: ["Getting warmer", "Nearly there", "Just a few more pages"],
-    reading: [
-        "Deciphering the handwriting",
-        "Squinting at the page",
-        "Whoever wrote this was in a hurry",
-        "Reading between the lines",
-    ],
 };
 const MESSAGE_SECONDS = 2.8;
 let phase, phaseStart;
@@ -113,10 +108,14 @@ function stopWork() {
 
 // The index of the notebook is only fetched once a page actually needs it.
 let modelPromise;
+let modelReady = false;
 let fetched = 0;
 function getModel() {
     if (!modelPromise) {
-        modelPromise = loadLanguageModel(wasm, (done, total) => { fetched = done / total; }).catch((error) => {
+        modelPromise = loadLanguageModel(wasm, (done, total) => { fetched = done / total; }).then((model) => {
+            modelReady = true;
+            return model;
+        }).catch((error) => {
             modelPromise = undefined;
             fetched = 0;
             error.fetchFailed = true;
@@ -160,6 +159,26 @@ function fitPaper() {
     paper.style.height = paper.scrollHeight + 'px';
 }
 
+/**
+ * Marks what differs between the text that was on the page and the text that
+ * is on it now, so that flipping to a similar page shows what changed. The
+ * mark is drawn behind the text and fades away.
+ */
+function showChange(before, after) {
+    changes.textContent = "";
+    if (before === after) return;
+    const shortest = Math.min(before.length, after.length);
+    let start = 0;
+    while (start < shortest && before[start] === after[start]) start++;
+    let end = 0;
+    while (end < shortest - start && before[before.length - 1 - end] === after[after.length - 1 - end]) end++;
+    // Nothing in common: a different page altogether, with nothing to point at.
+    if (start === 0 && end === 0) return;
+    const mark = document.createElement('mark');
+    mark.textContent = after.slice(start, after.length - end);
+    changes.append(after.slice(0, start), mark, after.slice(after.length - end));
+}
+
 // Pages live in the URL as #p<page number>.
 function pageNumberFromHash() {
     const match = /^#p(\d+)$/.exec(window.location.hash);
@@ -197,18 +216,26 @@ async function showPage() {
     window.document.title = `${baseTitle} – Page ${pageName(number)}`;
     showPageName();
 
+    // What is on the page stays there until the new page differs from it, so
+    // that flipping between similar pages does not flicker.
+    const before = paper.value;
+    changes.textContent = "";
+
     if (!knownPages.has(number)) {
         busy = true;
-        pageContent = "";
-        write("");
         paper.readOnly = true;
-        let reading = false;
-        showWork(() => reading ? { text: message("reading"), progress: "scribble" } : describeFetching());
+        if (modelReady) hideNote();
+        else showWork(describeFetching);
         try {
             const model = await getModel();
             const text = await enqueue(() => {
-                reading = true;
-                return model.decode(number, (text) => { if (!thisJob.aborted) write(text); }, thisJob);
+                if (!thisJob.aborted) {
+                    stopWork();
+                    hideNote();
+                }
+                return model.decode(number, (text) => {
+                    if (!thisJob.aborted && !before.startsWith(text)) write(text);
+                }, thisJob);
             });
             knownPages.set(number, text);
         } catch (error) {
@@ -231,6 +258,7 @@ async function showPage() {
     busy = false;
     pageContent = knownPages.get(number);
     write(pageContent);
+    showChange(before, pageContent);
     paper.readOnly = false;
     if (justFound === number) {
         showNote(pageContent === "" ? "Found it! The one blank page in the whole notebook." : "Found it! It was on this page all along.", { seconds: 4 });
@@ -291,6 +319,7 @@ paper.addEventListener('keydown', function (e) {
 });
 
 paper.addEventListener('input', function () {
+    changes.textContent = "";
     if (busy) return;
     const limited = wasm.limit_string_length(paper.value);
     if (limited !== paper.value) paper.value = limited;
@@ -351,15 +380,8 @@ pageNumberElement.addEventListener('keydown', function (e) {
 // after every jump.
 function flip(pages) {
     const number = BigInt(pageNumberFromHash() ?? pageNumber) + pages;
-    if (number < 1n) return;
-    // Turn the sheet over in the direction of travel.
-    const turn = pages > 0n ? 'turn-forward' : 'turn-back';
-    paper.classList.remove('turn-forward', 'turn-back');
-    void paper.offsetWidth;
-    paper.classList.add(turn);
-    jumpTo(number.toString());
+    if (number >= 1n) jumpTo(number.toString());
 }
-paper.addEventListener('animationend', () => paper.classList.remove('turn-forward', 'turn-back'));
 previousButton.addEventListener('click', () => flip(-1n));
 nextButton.addEventListener('click', () => flip(1n));
 

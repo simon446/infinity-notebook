@@ -162,16 +162,36 @@
         }
         .content:read-only { cursor: default; }
 
-        /* Turning the page: the old text leaves on one side, the new arrives from the other. */
-        .sheet { perspective: 1200px; overflow: hidden; }
-        .content.turn-forward { animation: turn-forward .38s ease-out; }
-        .content.turn-back { animation: turn-back .38s ease-out; }
-        @keyframes turn-forward {
-            from { transform: translateX(22%) rotateY(-28deg); opacity: 0; }
+        /* What changed since the previous page, drawn behind the text. It has
+           the text's exact layout, so each mark sits under its words. */
+        .page {
+            position: relative;
+            flex: 1;
+            display: flex;
+            min-width: 0;
         }
-        @keyframes turn-back {
-            from { transform: translateX(-22%) rotateY(28deg); opacity: 0; }
+        .changes {
+            position: absolute;
+            inset: 0;
+            margin: 0;
+            padding: 5px 14px var(--line) 12px;
+            color: transparent;
+            font: bold 18px/var(--line) 'Handlee', 'Comic Sans MS', cursive;
+            white-space: pre-wrap;
+            overflow-wrap: break-word;
+            pointer-events: none;
+            user-select: none;
         }
+        .changes mark {
+            color: transparent;
+            background: transparent;
+            border-radius: 4px;
+            animation: fresh-ink 1.6s ease-out;
+        }
+        @keyframes fresh-ink {
+            from, 25% { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+        }
+        .content { position: relative; }
 
         /* The sticky note that says what is going on */
         .note {
@@ -258,7 +278,7 @@
         footer a { color: inherit; }
 
         @media (prefers-reduced-motion: reduce) {
-            .note, .pencil, .flip.dice.rolling, .pencil-track.scribble .pencil, .content.turn-forward, .content.turn-back { animation: none; }
+            .note, .pencil, .flip.dice.rolling, .pencil-track.scribble .pencil { animation: none; }
             .pencil-line, .pencil { transition: none; }
         }
     </style>
@@ -273,7 +293,10 @@
             <button id="random" class="flip dice" type="button" aria-label="Random page" title="Random page">&#127922;</button>
         </header>
         <div id="sheet" class="sheet">
-            <textarea id="content" class="content" aria-label="Page text" spellcheck="false" autocapitalize="sentences"></textarea>
+            <div class="page">
+                <div id="changes" class="changes" aria-hidden="true"></div>
+                <textarea id="content" class="content" aria-label="Page text" spellcheck="false" autocapitalize="sentences"></textarea>
+            </div>
         </div>
         <aside id="note" class="note" role="status" aria-live="polite" hidden>
             <p id="note-text" class="note-text"></p>
