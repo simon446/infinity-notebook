@@ -158,9 +158,10 @@ function fitPaper() {
     paper.style.height = paper.scrollHeight + 'px';
 }
 
-// Pages live in the URL as #p<page number>.
+// Pages live in the URL as #page=<page number>. The older #p<page number>
+// still works.
 function pageNumberFromHash() {
-    const match = /^#p(\d+)$/.exec(window.location.hash);
+    const match = /^#p(?:age=)?(\d+)$/.exec(window.location.hash);
     if (!match) return undefined;
     const number = BigInt(match[1]).toString();
     return number === "0" ? undefined : number;
@@ -170,7 +171,7 @@ function jumpTo(number) {
     // Compare with the URL, not `pageNumber`, which lags behind it for a
     // moment after every jump.
     if (number === pageNumberFromHash()) showPage();
-    else window.location.hash = 'p' + number;
+    else window.location.hash = 'page=' + number;
 }
 
 function offerSearch() {
@@ -182,8 +183,8 @@ function offerSearch() {
 
 async function showPage() {
     const number = pageNumberFromHash();
-    if (number === undefined) {
-        window.location.replace('#p1');
+    if (number === undefined || window.location.hash !== '#page=' + number) {
+        window.location.replace('#page=' + (number ?? "1"));
         return;
     }
 

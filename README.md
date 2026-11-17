@@ -8,7 +8,7 @@ A page's text is compressed with a language model, the idea from 3Blue1Brown's
 [cross entropy videos](https://github.com/3b1b/videos/tree/master/_2026/cross_entropy):
 [SmolLM2-135M](https://huggingface.co/HuggingFaceTB/SmolLM2-135M) predicts each next token and an
 arithmetic coder (`src/coder.rs`) spends about `-log2(probability)` bits on it. The resulting
-bits are the page number (the `#p123...` in the URL), so text the model finds likely lands
+bits are the page number (the `#page=123...` in the URL), so text the model finds likely lands
 on low page numbers.
 
 Decoding a page needs exactly the numbers that were produced when it was encoded, on every
