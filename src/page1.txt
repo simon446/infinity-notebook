@@ -1,13 +1,13 @@
 # Infinity Notebook
 
-This notebook contains every piece of text that will ever exist (up to 2000 characters a page).
+Every text that fits on one page (up to 2000 characters) already has a page in this notebook.
 
-Go on, try it: change this text and press Enter, or tap "Find this page". Your words are already written down somewhere in here, and the notebook will open on that page.
+Write something here and press Enter, or tap "Find this page", to open the page it is on. Shift + Enter starts a new line.
 
-Flip through the pages with the arrows at the top, the arrow keys, or a swipe. Roll the dice for a random page, or tap the page number and type any number you like.
+Flip pages with the arrows, roll the dice for a random page, or type a page number at the top.
 
-For a new line on a keyboard, press Shift + Enter.
+Predictable text is near the front. Gibberish is far in the back.
 
-The first search fetches the notebook's index, which is rather heavy (about 135 MB), so give it a moment. Tidy, predictable writing is filed near the front. Gibberish is kept far, far in the back.
+The first search downloads about 135 MB.
 
 (╯°□°）╯︵ ┻━┻
