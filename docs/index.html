@@ -234,6 +234,37 @@
         /* No underline: the rule already runs under the words. */
         .content a { color: var(--accent); text-decoration: none; cursor: pointer; }
         .content ul, .content ol { padding-left: 30px; }
+        /* Bullets are drawn, not typeset: a pencil dot halfway between the
+           two rules of the item's first line, whatever is written next to
+           it. A rule is the last pixel of a line, so the middle of the space
+           between two rules is half a pixel above the middle of the line. */
+        .content ul { list-style: none; }
+        .content ul > li { position: relative; }
+        .content ul > li::before {
+            --dot: 7px;
+            content: '';
+            position: absolute;
+            left: -20px;
+            top: calc((var(--line) - 1px) / 2 - var(--shift-text, 9px) - var(--dot) / 2);
+            width: var(--dot);
+            height: var(--dot);
+            box-sizing: border-box;
+            background: currentColor;
+            opacity: .85;
+            /* not quite round, as a dot made by hand */
+            border-radius: 54% 46% 52% 48% / 47% 55% 45% 53%;
+            transform: rotate(-12deg);
+        }
+        /* Lists inside lists: a ring, then a dash. */
+        .content ul ul > li::before { background: none; border: 1.5px solid currentColor; }
+        .content ul ul ul > li::before {
+            --dot: 2px;
+            width: 8px;
+            border: 0;
+            border-radius: 1px;
+            background: currentColor;
+        }
+        .content ol > li::marker { color: var(--faded-ink); }
         .content li > * + * { margin-top: 0; }
         .content ul:not([data-tight="true"]) > li + li, .content ol:not([data-tight="true"]) > li + li { margin-top: var(--line); }
         .content blockquote {
@@ -397,6 +428,6 @@
         Every page is already written. You are only finding it.
         &middot; <a href="https://github.com/simon446/infinity-notebook">Source on GitHub</a>
     </footer>
-    <script type="module" src="./index-JDEZMZXH.js"></script>
+    <script type="module" src="./index-JZ2WSDH7.js"></script>
 </body>
 </html>

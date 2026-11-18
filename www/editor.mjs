@@ -13,7 +13,7 @@ import {
   schema as markdownSchema,
 } from "prosemirror-markdown";
 import { Schema } from "prosemirror-model";
-import { liftListItem, wrapInList } from "prosemirror-schema-list";
+import { liftListItem, sinkListItem, wrapInList } from "prosemirror-schema-list";
 import { EditorState, Plugin } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 
@@ -240,7 +240,12 @@ export function createEditor(mount, { onEdit, onSubmit, onState }) {
       state: EditorState.create({
         schema,
         plugins: [
-          keymap({ "Mod-Enter": () => (onSubmit(), true) }),
+          keymap({
+            "Mod-Enter": () => (onSubmit(), true),
+            // In a list, Tab moves the item a level in and Shift + Tab back out.
+            Tab: sinkListItem(schema.nodes.list_item),
+            "Shift-Tab": liftListItem(schema.nodes.list_item),
+          }),
           ...exampleSetup({ schema, menuBar: false }),
           linkAddresses,
         ],
