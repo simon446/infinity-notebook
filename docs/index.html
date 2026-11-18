@@ -22,8 +22,6 @@
         :root {
             --line: 30px;           /* height of one ruled line */
             --text: 19px;           /* size of the handwriting */
-            --drop: 5px;            /* how far above its rule a line of writing sits */
-            --baseline: 0.29;       /* where the font's baseline is; measured by index.js */
             --margin: 64px;         /* the punched margin on the left */
             --hole: 6px;
             --gap: 32px;            /* space around the notebook */
@@ -187,10 +185,9 @@
             flex: 1;
             min-width: 0;
             min-height: calc(8 * var(--line));
-            /* A line's baseline is at half its height plus a share of the font
-               size (--baseline). The padding puts ordinary writing on the
-               rules; blocks in another size shift themselves to match. */
-            padding: calc(var(--line) / 2 - var(--drop) - var(--baseline) * var(--text)) 14px var(--line) 12px;
+            /* index.js measures where each kind of writing puts its ink and
+               sets these shifts, so that all of it stands exactly on the rules. */
+            padding: var(--shift-text, 9px) 14px var(--line) 12px;
             outline: 0;
             color: var(--ink);
             font: 400 var(--text)/var(--line) 'Handlee', 'Comic Sans MS', cursive;
@@ -204,12 +201,23 @@
         .content ul, .content ol, .content blockquote, .content pre, .content hr { margin: 0; }
         /* One empty line between blocks, as in the Markdown. */
         .content > :not(:first-child) { margin-top: var(--line); }
-        .content h1, .content h2, .content h3, .content h4, .content h5, .content h6, .content pre {
+        .content h1, .content h2, .content h3, .content h4, .content h5, .content h6, .content pre,
+        .content strong, .content code {
             --lines: 1;             /* rules per line of this block's writing */
             position: relative;
-            top: calc((var(--lines) - 1) * var(--line) / 2 - var(--baseline) * (1em - var(--text)));
+        }
+        .content h1, .content h2, .content h3, .content h4, .content h5, .content h6, .content pre {
             line-height: calc(var(--lines) * var(--line));
         }
+        .content h1 { top: var(--shift-h1, 0px); }
+        .content h2 { top: var(--shift-h2, 0px); }
+        .content h3 { top: var(--shift-h3, 0px); }
+        .content h4, .content h5, .content h6 { top: var(--shift-h4, 0px); }
+        .content pre { top: var(--shift-pre, 0px); }
+        .content strong { top: var(--shift-strong, 0px); }
+        .content code { top: var(--shift-code, 0px); }
+        .content pre code, .content h1 strong, .content h2 strong, .content h3 strong,
+        .content h4 strong, .content h5 strong, .content h6 strong { top: 0; }
         .content h1, .content h2, .content h3, .content h4, .content h5, .content h6 { font-weight: bold; }
         .content h1 { font-size: 34px; --lines: 2; }
         .content h2 { font-size: 27px; }
@@ -217,7 +225,8 @@
         .content h4, .content h5, .content h6 { font-size: var(--text); }
         .content strong { font-weight: bold; }
         .content em { font-style: italic; }
-        .content a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+        /* No underline: the rule already runs under the words. */
+        .content a { color: var(--accent); text-decoration: none; cursor: pointer; }
         .content ul, .content ol { padding-left: 30px; }
         .content li > * + * { margin-top: 0; }
         .content ul:not([data-tight="true"]) > li + li, .content ol:not([data-tight="true"]) > li + li { margin-top: var(--line); }

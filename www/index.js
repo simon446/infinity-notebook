@@ -192,17 +192,79 @@ const editor = createEditor(content, {
 });
 
 /**
- * Measures where the handwriting font puts its baseline, which the style
- * sheet needs to set writing of any size on the rules (see --baseline).
+ * Sets every kind of writing exactly on the rules.
+ *
+ * A rule is the last pixel row of each line. For each kind of writing this
+ * measures where a line's baseline falls and how far below the baseline its
+ * letters reach once drawn (bold reaches a little further, small type less),
+ * then shifts that kind so its ink ends on the row above a rule. All of it
+ * is in device pixels, so it holds on any screen.
  */
-function measureBaseline() {
-    const probe = document.createElement('div');
-    probe.style.cssText = 'position:absolute;visibility:hidden;font-size:100px;line-height:100px;white-space:nowrap';
-    probe.innerHTML = 'x<span style="display:inline-block;width:0;height:0"></span>';
-    content.append(probe);
-    const baseline = probe.firstElementChild.getBoundingClientRect().top - probe.getBoundingClientRect().top;
-    probe.remove();
-    content.style.setProperty('--baseline', ((baseline - 50) / 100).toFixed(4));
+function setWritingOnRules() {
+    const ratio = window.devicePixelRatio || 1;
+    const line = parseFloat(getComputedStyle(content).lineHeight);
+
+    const measure = (tag, inner = "") => {
+        const probe = document.createElement(tag);
+        probe.style.cssText = 'position:absolute;visibility:hidden;top:0;left:0;white-space:nowrap;margin:0';
+        probe.innerHTML = `${inner}Hnmhi<span style="display:inline-block;width:0;height:0"></span>`;
+        content.append(probe);
+        const writing = probe.querySelector('strong, code') ?? probe;
+        const style = getComputedStyle(writing);
+        const baseline = probe.querySelector('span').getBoundingClientRect().top - probe.getBoundingClientRect().top;
+        const lines = Math.round(parseFloat(getComputedStyle(probe).lineHeight) / line);
+        const font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+        const size = parseFloat(style.fontSize);
+        probe.remove();
+        return { baseline, lines, sink: inkBelowBaseline(font, size, ratio) };
+    };
+
+    const text = measure('p');
+    // The device row a line's baseline has to be on for its ink to end just
+    // above the rule, as a distance from the top of the line.
+    const baselineRow = (kind) => (kind.lines * line - 1) - kind.sink / ratio;
+    const shiftText = baselineRow(text) - text.baseline;
+    content.style.setProperty('--shift-text', `${shiftText}px`);
+    for (const [name, tag, inner] of [['h1', 'h1'], ['h2', 'h2'], ['h3', 'h3'], ['h4', 'h4'], ['pre', 'pre']]) {
+        const kind = measure(tag, inner);
+        content.style.setProperty(`--shift-${name}`, `${baselineRow(kind) - kind.baseline - shiftText}px`);
+    }
+    // Inline styles share the line's baseline and only differ in how far they reach.
+    for (const [name, inner] of [['strong', '<strong>'], ['code', '<code>']]) {
+        const kind = measure('p', inner);
+        content.style.setProperty(`--shift-${name}`, `${(text.sink - kind.sink) / ratio}px`);
+    }
+}
+
+/**
+ * How many device pixel rows the letters of a font reach below its baseline
+ * (negative if they stop short of it), found by drawing them.
+ */
+function inkBelowBaseline(font, size, ratio) {
+    const canvas = document.createElement('canvas');
+    const baseline = Math.ceil(size * 1.5 * ratio);
+    canvas.width = Math.ceil(size * 5 * ratio);
+    canvas.height = baseline + Math.ceil(size * ratio);
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.scale(ratio, ratio);
+    context.font = font;
+    context.textBaseline = 'alphabetic';
+    context.fillText('Hnmhi', 2, baseline / ratio);
+    const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+    // The lowest inked row of every column; letters stand on the baseline
+    // with their stems, so most columns that reach low end at the same row.
+    const bottoms = [];
+    for (let x = 0; x < width; x++) {
+        for (let y = height - 1; y >= 0; y--) {
+            if (data[4 * (y * width + x) + 3] > 127) {
+                bottoms.push(y);
+                break;
+            }
+        }
+    }
+    if (bottoms.length === 0) return 0;
+    bottoms.sort((a, b) => a - b);
+    return bottoms[Math.floor(bottoms.length * 0.8)] + 1 - baseline;
 }
 
 /** Puts Markdown on the page. */
@@ -480,7 +542,8 @@ randomButton.addEventListener('click', function () {
     jumpTo(number);
 });
 
-measureBaseline();
-document.fonts?.ready.then(measureBaseline);
+setWritingOnRules();
+document.fonts?.ready.then(setWritingOnRules);
+window.addEventListener('resize', setWritingOnRules);
 window.addEventListener('hashchange', showPage);
 showPage();
