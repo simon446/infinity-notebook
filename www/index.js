@@ -232,15 +232,15 @@ function setWritingOnRules() {
     // above the rule, as a distance from the top of the line.
     const baselineRow = (kind) => (kind.lines * line - 1) - kind.sink / ratio;
     const shiftText = baselineRow(text) - text.baseline;
-    content.style.setProperty('--shift-text', `${shiftText}px`);
+    sheet.style.setProperty('--shift-text', `${shiftText}px`);
     for (const [name, tag, inner] of [['h1', 'h1'], ['h2', 'h2'], ['h3', 'h3'], ['h4', 'h4'], ['pre', 'pre']]) {
         const kind = measure(tag, inner);
-        content.style.setProperty(`--shift-${name}`, `${baselineRow(kind) - kind.baseline - shiftText}px`);
+        sheet.style.setProperty(`--shift-${name}`, `${baselineRow(kind) - kind.baseline - shiftText}px`);
     }
     // Inline styles share the line's baseline and only differ in how far they reach.
     for (const [name, inner] of [['strong', '<strong>'], ['code', '<code>']]) {
         const kind = measure('p', inner);
-        content.style.setProperty(`--shift-${name}`, `${(text.sink - kind.sink) / ratio}px`);
+        sheet.style.setProperty(`--shift-${name}`, `${(text.sink - kind.sink) / ratio}px`);
     }
     twin.remove();
 }

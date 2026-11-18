@@ -380,6 +380,52 @@
         }
         footer a { color: inherit; }
 
+        /* On paper: a sheet of ruled paper with the writing on it and nothing
+           else. The rules are 30px apart, which is 8 mm: ordinary ruled
+           paper. Smaller sheets get a narrower ruling, as smaller notebooks do. */
+        @page { margin: 12mm; }
+        @media print {
+            :root {
+                --gap: 0px;
+                --margin: 0px;
+                --desk: #fff;
+                --paper: #fff;
+                --ink: #000;
+                --faded-ink: #444;
+                --rule: #b9c3d2;
+                --margin-rule: #888;
+                --accent: #000;
+                color-scheme: light;
+            }
+            body { padding: 0; background: none; }
+            .page-header, .tools, .note, footer, .notebook::before { display: none !important; }
+            .notebook {
+                max-width: none;
+                /* a full sheet of rules, however little is written on it */
+                min-height: calc(100vh - var(--line));
+                border-radius: 0;
+                box-shadow: none;
+                background: none;
+            }
+            .sheet {
+                border-radius: 0;
+                /* the rules are a background; print them all the same */
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                /* Every sheet starts its rules afresh, as it starts its
+                   writing at the top. So the writing is not pushed down onto
+                   the rules, as on screen; the rules are pulled up under it. */
+                -webkit-box-decoration-break: clone;
+                box-decoration-break: clone;
+                background-position: 0 calc(-1 * var(--shift-text, 9px));
+            }
+            .content { padding: 0 2px; }
+            .content code, .content pre { background: none; }
+            .content a { color: inherit; }
+        }
+        @media print and (max-width: 160mm) { .notebook { zoom: .88; } }  /* A5: 7 mm */
+        @media print and (max-width: 115mm) { .notebook { zoom: .76; } }  /* A6: 6 mm */
+
         @media (prefers-reduced-motion: reduce) {
             .note, .pencil, .flip.dice.rolling, .pencil-track.scribble .pencil { animation: none; }
             .pencil-line, .pencil { transition: none; }
@@ -426,6 +472,6 @@
         Every page is already written. You are only finding it.
         &middot; <a href="https://github.com/simon446/infinity-notebook">Source on GitHub</a>
     </footer>
-    <script type="module" src="./index-JGEWMHEA.js"></script>
+    <script type="module" src="./index-VTXVDCNY.js"></script>
 </body>
 </html>
