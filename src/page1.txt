@@ -1,6 +1,6 @@
 # Infinity Notebook
 
-Every text that fits on one page (up to 2000 characters) already has a page in this notebook.
+Every text that fits on one page already has a page in this notebook. A page holds whatever fits in a link of 2000 characters: several thousand characters of ordinary writing, less of gibberish.
 
 Write something here, then press **Find this page** to open the page it is on.
 

@@ -1,7 +1,8 @@
 // Runs the language model off the page's thread, so the page can scroll and
 // take input while a page is being read or searched for.
 //
-// The page sends { id, type: "decode", page } or { id, type: "encode", text },
+// The page sends { id, type: "decode", page } or { id, type: "encode", text,
+// maxBits } (see LanguageModel.encode for the limit),
 // and { type: "abort", id } to give up on one. This answers, tagged with the
 // same id, with "started" once the model is ready, then "text" (decode) or
 // "progress" (encode) as it goes, and finally "done" or "error". Download
@@ -26,7 +27,7 @@ function getModel() {
 const signals = new Map();
 let queue = Promise.resolve(); // the model does one thing at a time
 
-async function work({ id, type, page, text }, signal) {
+async function work({ id, type, page, text, maxBits }, signal) {
   let model;
   try {
     model = await getModel();
@@ -40,12 +41,12 @@ async function work({ id, type, page, text }, signal) {
     if (type === "decode") {
       result = await model.decode(page, (text) => postMessage({ id, type: "text", text }), signal);
     } else {
-      const number = await model.encode(text, (done, total) => postMessage({ id, type: "progress", done, total }), signal);
+      const number = await model.encode(text, (done, total) => postMessage({ id, type: "progress", done, total }), signal, maxBits);
       result = { number, text: model.normalize(text) };
     }
     postMessage({ id, type: "done", result });
   } catch (error) {
-    postMessage({ id, type: "error", message: String(error) });
+    postMessage({ id, type: "error", message: String(error), fits: error.fits });
   }
 }
 

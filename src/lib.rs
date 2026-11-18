@@ -10,7 +10,6 @@ use substring::Substring;
 use wasm_bindgen::prelude::*;
 
 static PAGE1: &str = include_str!("page1.txt");
-static MAX_STRING_LENGTH: usize = 2000;
 
 #[wasm_bindgen]
 pub fn init() {
@@ -231,6 +230,12 @@ impl PageEncoder {
         self.count += 1;
     }
 
+    /// How many bits the page number has so far, at least. It only grows, so
+    /// a text that is already too long for a link can be given up early.
+    pub fn bits(&self) -> f64 {
+        self.encoder.bits() as f64
+    }
+
     /// Ends the text and returns the page number in decimal.
     pub fn finish(self) -> String {
         let mut memory = self.memory.borrow_mut();
@@ -303,13 +308,4 @@ pub fn first_page() -> String {
 #[wasm_bindgen]
 pub fn get_pagename(page_number: String) -> Option<String> {
     BigUint::parse_bytes(page_number.as_bytes(), 10).map(biguint_to_words)
-}
-
-#[wasm_bindgen]
-pub fn limit_string_length(string: String) -> String {
-    if string.len() > MAX_STRING_LENGTH {
-        string.substring(0, MAX_STRING_LENGTH).to_string()
-    } else {
-        string
-    }
 }

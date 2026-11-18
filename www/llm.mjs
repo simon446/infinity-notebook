@@ -7,7 +7,10 @@
 
 import { Tokenizer } from "@huggingface/tokenizers";
 
-export const MAX_TEXT_LENGTH = 2000;
+// No page is longer than this many characters. What a page can hold is really
+// set by its link (see MAX_LINK_LENGTH in index.js); this is for text so
+// predictable, or page numbers so long, that the link would not stop them.
+export const MAX_TEXT_LENGTH = 12000;
 
 // Bump when the files in model/ change, so browsers drop their stored copies.
 const MODEL_CACHE = "infinity-notebook-model-v3";
@@ -54,8 +57,11 @@ export class LanguageModel {
    * The page number (decimal string) of `text`.
    * @param onProgress called with (tokens done, tokens in total)
    * @param signal set `signal.aborted` to give up; the promise then rejects
+   * @param maxBits the largest page number allowed, in bits. For a text that
+   *   needs more, the promise rejects with an error whose `fits` says which
+   *   fraction of the text would have fit.
    */
-  async encode(text, onProgress = () => {}, signal = {}) {
+  async encode(text, onProgress = () => {}, signal = {}, maxBits = Infinity) {
     const tokens = this.tokenize(text);
     const encoder = new this.wasm.PageEncoder(this.model);
     try {
@@ -64,6 +70,7 @@ export class LanguageModel {
         await pause();
         if (signal.aborted) throw new Error("aborted");
         encoder.push(tokens[i]);
+        if (encoder.bits() > maxBits) throw Object.assign(new Error("too long"), { fits: i / tokens.length });
       }
     } catch (error) {
       encoder.free();

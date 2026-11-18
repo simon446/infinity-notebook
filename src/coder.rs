@@ -186,6 +186,11 @@ impl Encoder {
         self.interval.narrow(start, freq);
     }
 
+    /// A lower bound on the number of bits of the code so far.
+    pub fn bits(&self) -> u64 {
+        (TOTAL_BITS * self.interval.steps).saturating_sub(self.interval.range.bits())
+    }
+
     /// Ends the text and returns its smallest code. `logits` are the model's
     /// predictions for what follows the text.
     ///

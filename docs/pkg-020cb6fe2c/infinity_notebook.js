@@ -90,6 +90,15 @@ export class PageEncoder {
         wasm.__wbg_pageencoder_free(ptr, 0);
     }
     /**
+     * How many bits the page number has so far, at least. It only grows, so
+     * a text that is already too long for a link can be given up early.
+     * @returns {number}
+     */
+    bits() {
+        const ret = wasm.pageencoder_bits(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * Ends the text and returns the page number in decimal.
      * @returns {string}
      */
@@ -170,25 +179,6 @@ export function init() {
 export function is_text_token(token) {
     const ret = wasm.is_text_token(token);
     return ret !== 0;
-}
-
-/**
- * @param {string} string
- * @returns {string}
- */
-export function limit_string_length(string) {
-    let deferred2_0;
-    let deferred2_1;
-    try {
-        const ptr0 = passStringToWasm0(string, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.limit_string_length(ptr0, len0);
-        deferred2_0 = ret[0];
-        deferred2_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-    }
 }
 function __wbg_get_imports() {
     const import0 = {

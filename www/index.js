@@ -140,7 +140,7 @@ function startWorker() {
         } else {
             requests.delete(data.id);
             if (data.type === "done") request.resolve(data.result);
-            else request.reject(Object.assign(new Error(data.message), { fetchFailed: !!data.fetchFailed }));
+            else request.reject(Object.assign(new Error(data.message), { fetchFailed: !!data.fetchFailed, fits: data.fits }));
         }
     };
     worker.onerror = (event) => {
@@ -288,9 +288,22 @@ function showFormatting() {
     }
 }
 
-/** True if the page holds more than a page can. */
-function overfull(markdown) {
-    return wasm.limit_string_length(markdown) !== markdown;
+// A page holds what fits in a link: the short link to it (see shortLink) may
+// be this long. 2000 characters is what a chat message commonly allows, and
+// far below what browsers accept in an address.
+const MAX_LINK_LENGTH = 2000;
+// Longer than this cannot fit however predictable the text; not worth trying.
+const MAX_PAGE_LENGTH = 12000;
+
+/** The largest page number, in bits, whose short link is short enough. */
+function maxPageBits() {
+    return 6 * (MAX_LINK_LENGTH - (window.location.href.split('#')[0].length + 1));
+}
+
+/** Says that the page holds too much, and roughly how much of it would fit. */
+function showTooFull(fits) {
+    const share = fits === undefined ? "" : ` About the first ${Math.max(1, Math.floor(100 * fits))}% of it would fit.`;
+    showNote(`This page is too full: its link would be longer than ${MAX_LINK_LENGTH} characters.${share} Plain, predictable writing takes the least room.`);
 }
 
 // A short link writes the page number in base 64 with the URL-safe alphabet:
@@ -337,8 +350,8 @@ function jumpTo(number) {
 }
 
 function offerSearch() {
-    if (overfull(editor.getMarkdown())) {
-        showNote("This page is full. A page holds 2000 characters, so some of this has to go before I can look for it.");
+    if (editor.getMarkdown().length > MAX_PAGE_LENGTH) {
+        showTooFull();
         return;
     }
     showNote("New words! Shall I find the page they are written on?", {
@@ -424,7 +437,7 @@ async function showPage() {
 async function search() {
     if (busy || !searchMode) return;
     const text = editor.getMarkdown();
-    if (overfull(text)) return;
+    if (text.length > MAX_PAGE_LENGTH) return;
     const thisJob = job;
     busy = true;
     editor.setEditable(false);
@@ -437,13 +450,15 @@ async function search() {
     try {
         let number = "1";
         if (text !== FIRST_PAGE) {
-            const found = await ask({ type: "encode", text }, {
+            const found = await ask({ type: "encode", text, maxBits: maxPageBits() }, {
                 onProgress(tokensDone, tokens) {
                     done = tokensDone;
                     total = Math.max(tokens, 1);
                 },
             }, thisJob);
             number = found.number;
+            // The last bits are only known at the end.
+            if (shortLink(number).length > MAX_LINK_LENGTH) throw Object.assign(new Error("too long"), { fits: 0.99 });
             knownPages.set(number, found.text);
         }
         if (thisJob.aborted) return;
@@ -456,6 +471,10 @@ async function search() {
         stopWork();
         busy = false;
         editor.setEditable(true);
+        if (error.fits !== undefined) {
+            showTooFull(error.fits);
+            return;
+        }
         showNote(
             error.fetchFailed
                 ? "The notebook slipped on the way to the desk. Shall I pick it up again?"
