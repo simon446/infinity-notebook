@@ -39,6 +39,7 @@ export class LanguageModel {
   }
 
   detokenize(tokens) {
+    if (tokens.length === 0) return "";
     return this.tokenizer.decode(tokens, { skip_special_tokens: false });
   }
 

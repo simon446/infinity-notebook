@@ -4,9 +4,10 @@
 //! model assigned to it, so a text costs about `-log2 P(text)` bits: the more
 //! predictable the text, the smaller its page number.
 //!
-//! A text ends with the model's end-of-text token. A page number that was not
-//! produced by the encoder still decodes to something: tokens are read until
-//! the number's bits are used up, so short numbers give short texts.
+//! Every number decodes to a text: tokens are read until the number's bits
+//! are used up or the model's end-of-text token comes out, so short numbers
+//! give short texts. The encoder returns the smallest number that decodes to
+//! the tokens it was given.
 //!
 //! The model itself runs in JavaScript. This module only turns logits into an
 //! exact integer distribution and keeps the (arbitrary precision) interval, so
@@ -142,12 +143,36 @@ impl Interval {
 
 pub struct Encoder {
     interval: Interval,
+    /// The width of the interval before the last token narrowed it.
+    previous_range: BigUint,
     eos: u32,
+}
+
+/// How many bits a code needs before the decoder looks at another token once
+/// its interval is `range / 2^(32 * steps)` wide (see `Decoder::exhausted`).
+fn bits_to_continue(range: &BigUint, steps: u64) -> u64 {
+    (TOTAL_BITS * steps + 1).saturating_sub(range.bits())
+}
+
+/// The smallest `value` such that the point `value / 2^bit_count` lies in
+/// `[low, low + range) / 2^(32 * steps)`, if there is one.
+fn first_point(low: &BigUint, range: &BigUint, steps: u64, bit_count: u64) -> Option<BigUint> {
+    let denominator_bits = TOTAL_BITS * steps;
+    if bit_count >= denominator_bits {
+        return Some(low << (bit_count - denominator_bits));
+    }
+    let shift = denominator_bits - bit_count;
+    let value = (low + (BigUint::one() << shift) - 1u32) >> shift;
+    if (&value << shift) < low + range {
+        Some(value)
+    } else {
+        None
+    }
 }
 
 impl Encoder {
     pub fn new(eos: u32) -> Encoder {
-        Encoder { interval: Interval::new(), eos }
+        Encoder { interval: Interval::new(), previous_range: BigUint::one(), eos }
     }
 
     pub fn push(&mut self, logits: &[f32], token: u32) {
@@ -157,34 +182,40 @@ impl Encoder {
 
     /// Appends a token by its slice (see `token_slice`).
     pub fn narrow(&mut self, start: u64, freq: u64) {
+        self.previous_range = self.interval.range.clone();
         self.interval.narrow(start, freq);
     }
 
-    /// Ends the text and returns its code: a bit string `b` such that the
-    /// point `0.b` lies inside the text's interval, stored as the number `1b`
-    /// so that leading zeros survive.
+    /// Ends the text and returns its smallest code. `logits` are the model's
+    /// predictions for what follows the text.
+    ///
+    /// A code is a bit string `b`, stored as the number `1b` so that leading
+    /// zeros survive, such that the decoder reads the point `0.b` as exactly
+    /// these tokens. Fewer bits make a smaller number, and there are two ways
+    /// for the decoder to stop after the last token.
     pub fn finish(mut self, logits: &[f32]) -> BigUint {
-        // The decoder stops once the interval is narrower than 2^-len(b), so
-        // `b` must be long enough for it to get past the last real token.
-        let min_bit_count = (TOTAL_BITS * self.interval.steps + 1)
-            .saturating_sub(self.interval.range.bits());
-        self.push(logits, self.eos);
-
         let Interval { low, range, steps } = &self.interval;
-        if low.is_zero() {
-            return BigUint::one() << min_bit_count;
+        let past_last_token = bits_to_continue(range, *steps);
+
+        // It runs out of bits: enough of them to reach the last token, too
+        // few to go on, and a point inside the text's interval.
+        if *steps > 0 {
+            for bit_count in bits_to_continue(&self.previous_range, steps - 1)..past_last_token {
+                if let Some(value) = first_point(low, range, *steps, bit_count) {
+                    return (BigUint::one() << bit_count) | value;
+                }
+            }
         }
-        // The number in [low, high] with the most trailing zeros (and so the
-        // shortest `b`): keep the bits of `high` down to the highest bit where
-        // it differs from low - 1.
-        let high = low + range - 1u32;
-        let differing = (low - 1u32) ^ &high;
-        let j = differing.bits() - 1;
-        let point = (&high >> j) << j;
-        let trailing = point.trailing_zeros().unwrap_or(0);
-        let bit_count = TOTAL_BITS * steps - trailing;
-        let padding = min_bit_count.saturating_sub(bit_count);
-        ((BigUint::one() << bit_count) | (point >> trailing)) << padding
+
+        // Or it goes on and finds the end-of-text token there.
+        self.push(logits, self.eos);
+        let Interval { low, range, steps } = &self.interval;
+        for bit_count in past_last_token.. {
+            if let Some(value) = first_point(low, range, *steps, bit_count) {
+                return (BigUint::one() << bit_count) | value;
+            }
+        }
+        unreachable!("every interval contains a point once there are enough bits");
     }
 }
 
@@ -343,6 +374,24 @@ mod tests {
                 decoded.push(token);
             }
             assert_eq!(decoded, tokens);
+        }
+    }
+
+    #[test]
+    fn finds_the_first_code_of_a_text() {
+        // Likely texts have codes small enough to try every number before them.
+        let mut first = vec![];
+        first.push(top(&fake_logits(&first)));
+        let mut second = first.clone();
+        second.push(top(&fake_logits(&second)));
+        for tokens in [vec![], first, second] {
+            let code = encode(&tokens);
+            assert_eq!(decode(&code), tokens);
+            let limit = code.iter_u64_digits().next().unwrap_or(0);
+            assert!(code.bits() <= 24, "the text should be likely enough to search");
+            for smaller in 1..limit {
+                assert_ne!(decode(&BigUint::from(smaller)), tokens, "code {} comes before {}", smaller, code);
+            }
         }
     }
 

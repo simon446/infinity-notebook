@@ -22,7 +22,7 @@ const TOKENS: &[u32] = &[
     4018, 30,
 ];
 
-/// Its arithmetic code; the page number is one more.
+/// Its arithmetic code, the smallest there is; the page number is one more.
 const CODE: &str = "5641709378246156211764077360178999267515781706967594039080303113589219121587623673022558070957810488877";
 
 fn load_file() -> Vec<u8> {
@@ -85,6 +85,21 @@ fn known_text_keeps_its_page() {
         context.feed(token);
     }
     assert_eq!(tokens, TOKENS);
+}
+
+/// A search opens the first page a text is on. Later pages with the same
+/// text, which searches returned at first, still read the same.
+#[test]
+fn search_finds_the_first_page() {
+    let model = infinity_notebook::Model::new(load_file()).ok().unwrap();
+    let facebook = [48594];
+    assert_eq!(encode(&model, &facebook), "256");
+    for page in 2u32..256 {
+        assert_ne!(decode(&model, &page.to_string()), facebook, "page {page}");
+    }
+    assert_eq!(decode(&model, "256"), facebook);
+    assert_eq!(decode(&model, "1021"), facebook);
+    assert_eq!(decode(&model, "267321844"), facebook);
 }
 
 /// Work on one text is reused for the next one where they start the same.
