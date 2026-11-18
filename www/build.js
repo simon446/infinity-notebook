@@ -16,7 +16,7 @@ async function build() {
   fs.rmSync(dist, { recursive: true, force: true });
   fs.mkdirSync(dist, { recursive: true });
 
-  for (const file of ["favicon.ico", "favicon-32x32.png", "favicon-16x16.png", "apple-touch-icon.png", "model"]) {
+  for (const file of ["favicon.ico", "favicon-32x32.png", "favicon-16x16.png", "apple-touch-icon.png", "preview.png", "model"]) {
     copy(file, file);
   }
 
