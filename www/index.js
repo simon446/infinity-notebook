@@ -1,6 +1,5 @@
 import initWasm, * as wasm from "./pkg/infinity_notebook.js";
 import { canonical, createEditor } from "./editor.mjs";
-import { loadLanguageModel } from "./llm.mjs";
 
 await initWasm();
 wasm.init();
@@ -112,37 +111,68 @@ function stopWork() {
     clearInterval(workTimer);
 }
 
-// The index of the notebook is only fetched once a page actually needs it.
-let modelPromise;
+// The language model runs in a worker, which fetches it the first time a page
+// needs it. See worker.mjs for the messages.
+let worker;
 let modelReady = false;
 let fetched = 0;
-function getModel() {
-    if (!modelPromise) {
-        modelPromise = loadLanguageModel(wasm, (done, total) => { fetched = done / total; }).then((model) => {
+let lastRequest = 0;
+const requests = new Map();
+
+function startWorker() {
+    worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+    worker.onmessage = ({ data }) => {
+        if (data.type === "fetched") {
+            fetched = data.done / data.total;
+            return;
+        }
+        const request = requests.get(data.id);
+        if (!request) return;
+        if (data.type === "started") {
             modelReady = true;
-            return model;
-        }).catch((error) => {
-            modelPromise = undefined;
-            fetched = 0;
-            error.fetchFailed = true;
-            throw error;
-        });
-    }
-    return modelPromise;
+            request.onStart?.();
+        } else if (data.type === "text") {
+            request.onText?.(data.text);
+        } else if (data.type === "progress") {
+            request.onProgress?.(data.done, data.total);
+        } else {
+            requests.delete(data.id);
+            if (data.type === "done") request.resolve(data.result);
+            else request.reject(Object.assign(new Error(data.message), { fetchFailed: !!data.fetchFailed }));
+        }
+    };
+    worker.onerror = (event) => {
+        // The worker itself could not start: nothing it was asked will be answered.
+        for (const request of requests.values()) {
+            request.reject(Object.assign(new Error(event.message || "worker failed"), { fetchFailed: true }));
+        }
+        requests.clear();
+        worker = undefined;
+        fetched = 0;
+    };
+}
+
+/**
+ * Asks the worker to read or find a page. Aborting `forJob` gives up on it.
+ * @param handlers onStart, onText and onProgress callbacks
+ */
+function ask(message, handlers, forJob) {
+    if (!worker) startWorker();
+    const id = ++lastRequest;
+    forJob.cancel = () => worker?.postMessage({ type: "abort", id });
+    return new Promise((resolve, reject) => {
+        requests.set(id, { ...handlers, resolve, reject });
+        worker.postMessage({ ...message, id });
+    }).catch((error) => {
+        if (error.fetchFailed) fetched = 0;
+        throw error;
+    });
 }
 
 function describeFetching() {
     return fetched < 1
         ? { text: message("fetching"), progress: fetched }
         : { text: message("opening"), progress: "scribble" };
-}
-
-// The notebook can only do one thing at a time.
-let queue = Promise.resolve();
-function enqueue(task) {
-    const result = queue.then(task);
-    queue = result.catch(() => {});
-    return result;
 }
 
 function pageName(number) {
@@ -212,6 +242,7 @@ async function showPage() {
     }
 
     job.aborted = true;
+    job.cancel?.();
     const thisJob = job = {};
     stopWork();
     pageNumber = number;
@@ -228,17 +259,24 @@ async function showPage() {
         editor.setEditable(false);
         if (modelReady) hideNote();
         else showWork(describeFetching);
+        let latest, frame;
         try {
-            const model = await getModel();
-            const text = await enqueue(() => {
-                if (!thisJob.aborted) {
+            const text = await ask({ type: "decode", page: number }, {
+                onStart() {
+                    if (thisJob.aborted) return;
                     stopWork();
                     hideNote();
-                }
-                return model.decode(number, (text) => {
-                    if (!thisJob.aborted && !before.startsWith(text)) write(text);
-                }, thisJob);
-            });
+                },
+                // Text arrives token by token; the page is redrawn once a frame.
+                onText(text) {
+                    latest = text;
+                    frame ??= requestAnimationFrame(() => {
+                        frame = undefined;
+                        if (!thisJob.aborted && !thisJob.finished && !before.startsWith(latest)) write(latest);
+                    });
+                },
+            }, thisJob);
+            thisJob.finished = true;
             knownPages.set(number, text);
         } catch (error) {
             if (thisJob.aborted) return;
@@ -287,12 +325,14 @@ async function search() {
     try {
         let number = "1";
         if (text !== FIRST_PAGE) {
-            const model = await getModel();
-            number = await enqueue(() => model.encode(text, (tokensDone, tokens) => {
-                done = tokensDone;
-                total = Math.max(tokens, 1);
-            }, thisJob));
-            knownPages.set(number, model.normalize(text));
+            const found = await ask({ type: "encode", text }, {
+                onProgress(tokensDone, tokens) {
+                    done = tokensDone;
+                    total = Math.max(tokens, 1);
+                },
+            }, thisJob);
+            number = found.number;
+            knownPages.set(number, found.text);
         }
         if (thisJob.aborted) return;
         stopWork();

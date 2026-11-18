@@ -26,10 +26,11 @@ for (const file of ["infinity_notebook.js", "infinity_notebook_bg.wasm"]) {
   copy(path.join("..", "pkg", file), path.join("pkg", file));
 }
 
-// The wasm package stays a file of its own: it finds its .wasm next to itself.
+// The page's script, and the worker that runs the language model for it. The
+// wasm package stays a file of its own: it finds its .wasm next to itself.
 esbuild.buildSync({
-  entryPoints: [path.join(__dirname, "index.js")],
-  outfile: path.join(dist, "index.js"),
+  entryPoints: [path.join(__dirname, "index.js"), path.join(__dirname, "worker.mjs")],
+  outdir: dist,
   bundle: true,
   format: "esm",
   target: "es2022",
