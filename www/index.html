@@ -21,6 +21,9 @@
     <style>
         :root {
             --line: 30px;           /* height of one ruled line */
+            --text: 19px;           /* size of the handwriting */
+            --drop: 5px;            /* how far above its rule a line of writing sits */
+            --baseline: 0.29;       /* where the font's baseline is; measured by index.js */
             --margin: 64px;         /* the punched margin on the left */
             --hole: 6px;
             --gap: 32px;            /* space around the notebook */
@@ -184,10 +187,13 @@
             flex: 1;
             min-width: 0;
             min-height: calc(8 * var(--line));
-            padding: 5px 14px var(--line) 12px;
+            /* A line's baseline is at half its height plus a share of the font
+               size (--baseline). The padding puts ordinary writing on the
+               rules; blocks in another size shift themselves to match. */
+            padding: calc(var(--line) / 2 - var(--drop) - var(--baseline) * var(--text)) 14px var(--line) 12px;
             outline: 0;
             color: var(--ink);
-            font: 400 19px/var(--line) 'Handlee', 'Comic Sans MS', cursive;
+            font: 400 var(--text)/var(--line) 'Handlee', 'Comic Sans MS', cursive;
             white-space: pre-wrap;
             overflow-wrap: break-word;
             -webkit-font-variant-ligatures: none;
@@ -198,14 +204,20 @@
         .content ul, .content ol, .content blockquote, .content pre, .content hr { margin: 0; }
         /* One empty line between blocks, as in the Markdown. */
         .content > :not(:first-child) { margin-top: var(--line); }
-        .content h1, .content h2, .content h3, .content h4, .content h5, .content h6 { font-weight: bold; line-height: var(--line); }
-        .content h1 { font-size: 30px; line-height: calc(2 * var(--line)); }
-        .content h2 { font-size: 25px; }
-        .content h3 { font-size: 21px; }
-        .content h4, .content h5, .content h6 { font-size: 19px; }
+        .content h1, .content h2, .content h3, .content h4, .content h5, .content h6, .content pre {
+            --lines: 1;             /* rules per line of this block's writing */
+            position: relative;
+            top: calc((var(--lines) - 1) * var(--line) / 2 - var(--baseline) * (1em - var(--text)));
+            line-height: calc(var(--lines) * var(--line));
+        }
+        .content h1, .content h2, .content h3, .content h4, .content h5, .content h6 { font-weight: bold; }
+        .content h1 { font-size: 34px; --lines: 2; }
+        .content h2 { font-size: 27px; }
+        .content h3 { font-size: 22px; }
+        .content h4, .content h5, .content h6 { font-size: var(--text); }
         .content strong { font-weight: bold; }
         .content em { font-style: italic; }
-        .content a { color: var(--accent); text-decoration: underline; cursor: text; }
+        .content a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
         .content ul, .content ol { padding-left: 30px; }
         .content li > * + * { margin-top: 0; }
         .content ul:not([data-tight="true"]) > li + li, .content ol:not([data-tight="true"]) > li + li { margin-top: var(--line); }
@@ -216,17 +228,19 @@
         }
         .content blockquote > * + * { margin-top: var(--line); }
         .content code {
-            font: 15px/var(--line) ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+            font: 15px/1 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+            padding: 2px 0;
             background: color-mix(in srgb, var(--rule) 45%, transparent);
             border-radius: 4px;
         }
         .content pre {
+            font-size: 15px;
             padding: 0 10px;
             border-radius: 6px;
             background: color-mix(in srgb, var(--rule) 45%, transparent);
             white-space: pre-wrap;
         }
-        .content pre code { background: none; }
+        .content pre code { background: none; padding: 0; line-height: inherit; }
         .content hr {
             height: var(--line);
             border: 0;

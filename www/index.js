@@ -184,11 +184,26 @@ function showPageName() {
     previousButton.disabled = pageNumber === "1";
 }
 
-const editor = createEditor(document.getElementById('content'), {
+const content = document.getElementById('content');
+const editor = createEditor(content, {
     onEdit: edited,
     onSubmit: () => search(),
     onState: showFormatting,
 });
+
+/**
+ * Measures where the handwriting font puts its baseline, which the style
+ * sheet needs to set writing of any size on the rules (see --baseline).
+ */
+function measureBaseline() {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;font-size:100px;line-height:100px;white-space:nowrap';
+    probe.innerHTML = 'x<span style="display:inline-block;width:0;height:0"></span>';
+    content.append(probe);
+    const baseline = probe.firstElementChild.getBoundingClientRect().top - probe.getBoundingClientRect().top;
+    probe.remove();
+    content.style.setProperty('--baseline', ((baseline - 50) / 100).toFixed(4));
+}
 
 /** Puts Markdown on the page. */
 function write(markdown) {
@@ -465,5 +480,7 @@ randomButton.addEventListener('click', function () {
     jumpTo(number);
 });
 
+measureBaseline();
+document.fonts?.ready.then(measureBaseline);
 window.addEventListener('hashchange', showPage);
 showPage();
