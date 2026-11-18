@@ -5,6 +5,8 @@
 // in the infinity-notebook wasm module, written so that every machine gets
 // exactly the same numbers. This file adds the tokenizer and the downloads.
 
+import { Tokenizer } from "@huggingface/tokenizers";
+
 export const MAX_TEXT_LENGTH = 2000;
 
 // Bump when the files in model/ change, so browsers drop their stored copies.
@@ -206,8 +208,7 @@ export async function fetchParts(url, cache, onProgress = () => {}) {
 export async function loadLanguageModel(wasm, onProgress = () => {}) {
   const file = (path) => new URL(path, import.meta.url).href;
   const cache = await openModelCache();
-  const [{ Tokenizer }, tokenizerJson, tokenizerConfig, weights] = await Promise.all([
-    import("./vendor/tokenizers.min.mjs"),
+  const [tokenizerJson, tokenizerConfig, weights] = await Promise.all([
     cachedFetch(cache, file("model/tokenizer.json")).then((r) => r.json()),
     cachedFetch(cache, file("model/tokenizer_config.json")).then((r) => r.json()),
     fetchParts(file("model/model.bin"), cache, onProgress),

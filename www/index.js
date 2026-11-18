@@ -1,27 +1,34 @@
 import initWasm, * as wasm from "./pkg/infinity_notebook.js";
+import { canonical, createEditor } from "./editor.mjs";
 import { loadLanguageModel } from "./llm.mjs";
 
 await initWasm();
 wasm.init();
 
-const paper = document.getElementById('content');
 const pageNumberElement = document.getElementById('pagenum');
 const previousButton = document.getElementById('previous');
 const nextButton = document.getElementById('next');
 const randomButton = document.getElementById('random');
 const sheet = document.getElementById('sheet');
+const tools = document.getElementById('tools');
 const note = document.getElementById('note');
 const noteText = document.getElementById('note-text');
 const noteProgress = document.getElementById('note-progress');
 const noteAction = document.getElementById('note-action');
 const baseTitle = window.document.title;
 
-// On a touch keyboard Enter makes a new line and the button searches.
+// Without a keyboard there is no shortcut to mention.
 const touch = window.matchMedia('(pointer: coarse)').matches;
+const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "\u2318 + Enter" : "Ctrl + Enter";
+
+// Pages are Markdown. The page shows it as rich text, and gives it back in
+// one fixed spelling: `canonical(text)` is how `text` reads once on the page.
+const FIRST_PAGE = canonical(wasm.first_page());
 
 let pageNumber;          // the page being shown, as a decimal string
-let pageContent = "";    // its text, once known
-let searchMode = false;  // the text was edited and can be searched for
+let pageContent = "";    // its Markdown as the page gives it back, once known
+let written = "";        // the Markdown last put on the page
+let searchMode = false;  // the page was edited and can be searched for
 let busy = false;        // a page is being read or searched for
 let job = {};            // the work for the current page
 let justFound;           // the page number a search just led to
@@ -147,15 +154,28 @@ function showPageName() {
     previousButton.disabled = pageNumber === "1";
 }
 
-/** Sets the text on the page and makes the page as tall as the text. */
-function write(text) {
-    paper.value = text;
-    fitPaper();
+const editor = createEditor(document.getElementById('content'), {
+    onEdit: edited,
+    onSubmit: () => search(),
+    onState: showFormatting,
+});
+
+/** Puts Markdown on the page. */
+function write(markdown) {
+    written = markdown;
+    editor.setMarkdown(markdown);
 }
 
-function fitPaper() {
-    paper.style.height = 'auto';
-    paper.style.height = paper.scrollHeight + 'px';
+/** Lights up the formatting buttons that apply at the cursor. */
+function showFormatting() {
+    for (const button of tools.querySelectorAll('button')) {
+        button.setAttribute('aria-pressed', editor.active(button.dataset.format));
+    }
+}
+
+/** True if the page holds more than a page can. */
+function overfull(markdown) {
+    return wasm.limit_string_length(markdown) !== markdown;
 }
 
 // Pages live in the URL as #page=<page number>. The older #p<page number>
@@ -175,10 +195,13 @@ function jumpTo(number) {
 }
 
 function offerSearch() {
-    showNote(
-        touch ? "New words! Shall I find the page they are written on?" : "New words! Press Enter and I will find the page they are written on.",
-        { action: { label: "Find this page", run: search } }
-    );
+    if (overfull(editor.getMarkdown())) {
+        showNote("This page is full. A page holds 2000 characters, so some of this has to go before I can look for it.");
+        return;
+    }
+    showNote("New words! Shall I find the page they are written on?", {
+        action: { label: touch ? "Find this page" : `Find this page (${shortcut})`, run: search },
+    });
 }
 
 async function showPage() {
@@ -198,11 +221,11 @@ async function showPage() {
 
     // What is on the page stays there until the new page differs from it, so
     // that flipping between similar pages does not flicker.
-    const before = paper.value;
+    const before = searchMode ? editor.getMarkdown() : written;
 
     if (!knownPages.has(number)) {
         busy = true;
-        paper.readOnly = true;
+        editor.setEditable(false);
         if (modelReady) hideNote();
         else showWork(describeFetching);
         try {
@@ -235,9 +258,9 @@ async function showPage() {
     }
 
     busy = false;
-    pageContent = knownPages.get(number);
-    write(pageContent);
-    paper.readOnly = false;
+    write(knownPages.get(number));
+    pageContent = editor.getMarkdown();
+    editor.setEditable(true);
     if (justFound === number) {
         showNote(pageContent === "" ? "Found it! The one blank page in the whole notebook." : "Found it! It was on this page all along.", { seconds: 4 });
     } else if (pageContent === "") {
@@ -250,10 +273,11 @@ async function showPage() {
 
 async function search() {
     if (busy || !searchMode) return;
-    const text = wasm.limit_string_length(paper.value);
+    const text = editor.getMarkdown();
+    if (overfull(text)) return;
     const thisJob = job;
     busy = true;
-    paper.readOnly = true;
+    editor.setEditable(false);
     let done = 0, total = 0;
     showWork(() => {
         if (total === 0) return describeFetching();
@@ -262,7 +286,7 @@ async function search() {
     });
     try {
         let number = "1";
-        if (text !== wasm.first_page()) {
+        if (text !== FIRST_PAGE) {
             const model = await getModel();
             number = await enqueue(() => model.encode(text, (tokensDone, tokens) => {
                 done = tokensDone;
@@ -279,7 +303,7 @@ async function search() {
         console.error(error);
         stopWork();
         busy = false;
-        paper.readOnly = false;
+        editor.setEditable(true);
         showNote(
             error.fetchFailed
                 ? "The notebook slipped on the way to the desk. Shall I pick it up again?"
@@ -289,25 +313,22 @@ async function search() {
     }
 }
 
-paper.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !touch) {
-        e.preventDefault();
-        search();
-    }
-});
-
-paper.addEventListener('input', function () {
+/** The person changed the page. */
+function edited() {
     if (busy) return;
-    const limited = wasm.limit_string_length(paper.value);
-    if (limited !== paper.value) paper.value = limited;
-    fitPaper();
-    if (paper.value === pageContent) {
+    if (editor.getMarkdown() === pageContent) {
         searchMode = false;
         hideNote();
-    } else if (!searchMode) {
+    } else {
         searchMode = true;
         offerSearch();
     }
+}
+
+tools.addEventListener('mousedown', (e) => e.preventDefault()); // keep the cursor on the page
+tools.addEventListener('click', function (e) {
+    const button = e.target.closest('button');
+    if (button && !busy) editor.run(button.dataset.format);
 });
 
 // The page number shows the page's name, and its digits while being edited.
@@ -366,7 +387,7 @@ nextButton.addEventListener('click', () => flip(1n));
 // is being typed.
 document.addEventListener('keydown', function (e) {
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-    const typing = document.activeElement === paper || document.activeElement === pageNumberElement;
+    const typing = editor.hasFocus() || document.activeElement === pageNumberElement;
     let pages;
     if (e.key === 'PageDown' || (e.key === 'ArrowRight' && !typing)) pages = 1n;
     else if (e.key === 'PageUp' || (e.key === 'ArrowLeft' && !typing)) pages = -1n;
@@ -404,7 +425,5 @@ randomButton.addEventListener('click', function () {
     jumpTo(number);
 });
 
-window.addEventListener('resize', fitPaper);
 window.addEventListener('hashchange', showPage);
-document.fonts?.ready.then(fitPaper);
 showPage();

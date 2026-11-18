@@ -24,12 +24,18 @@ They are made from the original model with
 python3 tools/convert_weights.py model.safetensors www/model
 ```
 
+## The page
+
+A page is edited as rich text and kept as Markdown: the Markdown is what gets a page number.
+The editor (`www/editor.mjs`) is [ProseMirror](https://prosemirror.net) with its own
+`prosemirror-markdown`, without images, and with line breaks kept as line breaks.
+
 ## Building
 
 ```
 cd www
 npm install
-npm run build   # builds the Rust wasm package and writes www/dist
+npm run build   # builds the Rust wasm package, bundles the page and writes www/dist
 ```
 
 Needs Rust with the `wasm32-unknown-unknown` target and Node. On pushes to master, GitHub

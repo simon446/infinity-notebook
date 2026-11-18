@@ -137,7 +137,41 @@
         .flip.dice.rolling { animation: roll .45s ease-out; }
         @keyframes roll { from { transform: rotate(-200deg) scale(.7); } to { transform: none; } }
 
-        /* The ruled sheet */
+        /* Formatting buttons, on a line of their own under the page number */
+        .tools {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            height: var(--line);
+            padding: 0 6px 0 calc(var(--margin) + 6px);
+            border-bottom: 1px solid var(--rule);
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .tools::-webkit-scrollbar { display: none; }
+        .tools button {
+            flex: none;
+            min-width: 34px;
+            height: 26px;
+            padding: 0 7px;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--faded-ink);
+            font: 600 14px/1 'Roboto Slab', Georgia, serif;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .tools button:hover, .tools button:focus-visible { background: color-mix(in srgb, var(--rule) 55%, transparent); color: var(--ink); outline: 0; }
+        .tools button[aria-pressed="true"] { background: color-mix(in srgb, var(--rule) 80%, transparent); color: var(--ink); }
+        .tools .italic { font-style: italic; }
+        @media (pointer: coarse) {
+            .tools { height: calc(1.5 * var(--line)); gap: 6px; }
+            .tools button { min-width: 40px; height: 36px; }
+        }
+
+        /* The ruled sheet. Every block on it is a whole number of lines tall,
+           so the writing stays on the rules. */
         .sheet {
             flex: 1;
             display: flex;
@@ -146,21 +180,69 @@
             border-radius: 0 0 10px 10px;
         }
         .content {
-            display: block;
+            position: relative;
             flex: 1;
-            width: 100%;
+            min-width: 0;
             min-height: calc(8 * var(--line));
-            margin: 0;
             padding: 5px 14px var(--line) 12px;
-            border: 0;
             outline: 0;
-            resize: none;
-            overflow: hidden;
-            background: transparent;
             color: var(--ink);
-            font: bold 18px/var(--line) 'Handlee', 'Comic Sans MS', cursive;
+            font: 400 19px/var(--line) 'Handlee', 'Comic Sans MS', cursive;
+            white-space: pre-wrap;
+            overflow-wrap: break-word;
+            -webkit-font-variant-ligatures: none;
+            font-variant-ligatures: none;
         }
-        .content:read-only { cursor: default; }
+        .content[contenteditable="false"] { cursor: default; }
+        .content p, .content h1, .content h2, .content h3, .content h4, .content h5, .content h6,
+        .content ul, .content ol, .content blockquote, .content pre, .content hr { margin: 0; }
+        /* One empty line between blocks, as in the Markdown. */
+        .content > :not(:first-child) { margin-top: var(--line); }
+        .content h1, .content h2, .content h3, .content h4, .content h5, .content h6 { font-weight: bold; line-height: var(--line); }
+        .content h1 { font-size: 30px; line-height: calc(2 * var(--line)); }
+        .content h2 { font-size: 25px; }
+        .content h3 { font-size: 21px; }
+        .content h4, .content h5, .content h6 { font-size: 19px; }
+        .content strong { font-weight: bold; }
+        .content em { font-style: italic; }
+        .content a { color: var(--accent); text-decoration: underline; cursor: text; }
+        .content ul, .content ol { padding-left: 30px; }
+        .content li > * + * { margin-top: 0; }
+        .content ul:not([data-tight="true"]) > li + li, .content ol:not([data-tight="true"]) > li + li { margin-top: var(--line); }
+        .content blockquote {
+            padding-left: 14px;
+            border-left: 3px solid var(--margin-rule);
+            color: var(--faded-ink);
+        }
+        .content blockquote > * + * { margin-top: var(--line); }
+        .content code {
+            font: 15px/var(--line) ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+            background: color-mix(in srgb, var(--rule) 45%, transparent);
+            border-radius: 4px;
+        }
+        .content pre {
+            padding: 0 10px;
+            border-radius: 6px;
+            background: color-mix(in srgb, var(--rule) 45%, transparent);
+            white-space: pre-wrap;
+        }
+        .content pre code { background: none; }
+        .content hr {
+            height: var(--line);
+            border: 0;
+            background: linear-gradient(var(--faded-ink), var(--faded-ink)) center / 40% 2px no-repeat;
+        }
+        .content .ProseMirror-gapcursor { display: none; pointer-events: none; position: absolute; }
+        .content .ProseMirror-gapcursor::after {
+            content: '';
+            display: block;
+            position: absolute;
+            top: -2px;
+            width: 20px;
+            border-top: 1px solid var(--ink);
+        }
+        .content.ProseMirror-focused .ProseMirror-gapcursor { display: block; }
+        .content .ProseMirror-selectednode { outline: 2px solid var(--accent); }
 
         /* The sticky note that says what is going on */
         .note {
@@ -261,8 +343,17 @@
             <button id="next" class="flip" type="button" aria-label="Next page" title="Next page">&rsaquo;</button>
             <button id="random" class="flip dice" type="button" aria-label="Random page" title="Random page">&#127922;</button>
         </header>
+        <div id="tools" class="tools" role="toolbar" aria-label="Formatting">
+            <button type="button" data-format="strong" aria-label="Bold" title="Bold" aria-pressed="false">B</button>
+            <button type="button" data-format="em" class="italic" aria-label="Italic" title="Italic" aria-pressed="false">I</button>
+            <button type="button" data-format="heading1" aria-label="Large heading" title="Large heading" aria-pressed="false">H1</button>
+            <button type="button" data-format="heading2" aria-label="Small heading" title="Small heading" aria-pressed="false">H2</button>
+            <button type="button" data-format="bullet_list" aria-label="Bullet list" title="Bullet list" aria-pressed="false">&bull; List</button>
+            <button type="button" data-format="ordered_list" aria-label="Numbered list" title="Numbered list" aria-pressed="false">1. List</button>
+            <button type="button" data-format="blockquote" aria-label="Quote" title="Quote" aria-pressed="false">&ldquo; Quote</button>
+        </div>
         <div id="sheet" class="sheet">
-            <textarea id="content" class="content" aria-label="Page text" spellcheck="false" autocapitalize="sentences"></textarea>
+            <div id="content" class="content" role="textbox" aria-multiline="true" aria-label="Page text" spellcheck="false"></div>
         </div>
         <aside id="note" class="note" role="status" aria-live="polite" hidden>
             <p id="note-text" class="note-text"></p>

@@ -2,9 +2,11 @@
 
 Every text that fits on one page (up to 2000 characters) already has a page in this notebook.
 
-Write something here and press Enter, or tap "Find this page", to open the page it is on. Shift + Enter starts a new line.
+Write something here, then press **Find this page** to open the page it is on.
 
 Flip pages with the arrows, roll the dice for a random page, or type a page number at the top.
+
+Pages are kept as Markdown, so **bold**, *italic*, headings, lists and quotes all work.
 
 Predictable text is near the front. Gibberish is far in the back.
 
