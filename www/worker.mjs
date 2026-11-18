@@ -2,7 +2,7 @@
 // take input while a page is being read or searched for.
 //
 // The page sends { id, type: "decode", page } or { id, type: "encode", text,
-// maxBits } (see LanguageModel.encode for the limit),
+// maxBits } (see LanguageModel.encode),
 // and { type: "abort", id } to give up on one. This answers, tagged with the
 // same id, with "started" once the model is ready, then "text" (decode) or
 // "progress" (encode) as it goes, and finally "done" or "error". Download
@@ -41,12 +41,11 @@ async function work({ id, type, page, text, maxBits }, signal) {
     if (type === "decode") {
       result = await model.decode(page, (text) => postMessage({ id, type: "text", text }), signal);
     } else {
-      const number = await model.encode(text, (done, total) => postMessage({ id, type: "progress", done, total }), signal, maxBits);
-      result = { number, text: model.normalize(text) };
+      result = await model.encode(text, (done, total) => postMessage({ id, type: "progress", done, total }), signal, maxBits);
     }
     postMessage({ id, type: "done", result });
   } catch (error) {
-    postMessage({ id, type: "error", message: String(error), fits: error.fits });
+    postMessage({ id, type: "error", message: String(error) });
   }
 }
 

@@ -32,6 +32,7 @@ let searchMode = false;  // the page was edited and can be searched for
 let busy = false;        // a page is being read or searched for
 let job = {};            // the work for the current page
 let justFound;           // the page number a search just led to
+let lostEnd = "";        // what that search could not fit on the page
 const knownPages = new Map([["1", wasm.first_page()]]);
 
 // What the sticky note says while the notebook is busy. Each list is cycled
@@ -140,7 +141,7 @@ function startWorker() {
         } else {
             requests.delete(data.id);
             if (data.type === "done") request.resolve(data.result);
-            else request.reject(Object.assign(new Error(data.message), { fetchFailed: !!data.fetchFailed, fits: data.fits }));
+            else request.reject(Object.assign(new Error(data.message), { fetchFailed: !!data.fetchFailed }));
         }
     };
     worker.onerror = (event) => {
@@ -300,10 +301,20 @@ function maxPageBits() {
     return 6 * (MAX_LINK_LENGTH - (window.location.href.split('#')[0].length + 1));
 }
 
-/** Says that the page holds too much, and roughly how much of it would fit. */
-function showTooFull(fits) {
-    const share = fits === undefined ? "" : ` About the first ${Math.max(1, Math.floor(100 * fits))}% of it would fit.`;
-    showNote(`This page is too full: its link would be longer than ${MAX_LINK_LENGTH} characters.${share} Plain, predictable writing takes the least room.`);
+/**
+ * Says that the end of what was written did not fit on the page, and offers
+ * it back. `rest` is the Markdown that was left off.
+ */
+function showFellOff(rest) {
+    showNote("I ran out of page! The end of what you wrote fell off the bottom. A page only holds what fits in its link.", {
+        action: {
+            label: "Copy what fell off",
+            run: async () => {
+                const copied = await copy(rest);
+                showNote(copied ? "The rest is on your clipboard. Try the next page." : "I could not reach the clipboard, sorry.", { seconds: 5 });
+            },
+        },
+    });
 }
 
 // A short link writes the page number in base 64 with the URL-safe alphabet:
@@ -350,10 +361,6 @@ function jumpTo(number) {
 }
 
 function offerSearch() {
-    if (editor.getMarkdown().length > MAX_PAGE_LENGTH) {
-        showTooFull();
-        return;
-    }
     showNote("New words! Shall I find the page they are written on?", {
         action: { label: touch ? "Find this page" : `Find this page (${shortcut})`, run: search },
     });
@@ -424,7 +431,9 @@ async function showPage() {
     write(knownPages.get(number));
     pageContent = editor.getMarkdown();
     editor.setEditable(true);
-    if (justFound === number) {
+    if (justFound === number && lostEnd !== "") {
+        showFellOff(lostEnd);
+    } else if (justFound === number) {
         showNote(pageContent === "" ? "Found it! The one blank page in the whole notebook." : "Found it! It was on this page all along.", { seconds: 4 });
     } else if (pageContent === "") {
         showNote("Nothing on this page yet. Whatever you write here already has a page of its own.", { seconds: 5 });
@@ -432,12 +441,15 @@ async function showPage() {
         hideNote();
     }
     justFound = undefined;
+    lostEnd = "";
 }
 
 async function search() {
     if (busy || !searchMode) return;
-    const text = editor.getMarkdown();
-    if (text.length > MAX_PAGE_LENGTH) return;
+    // Far more than a page: do not even try the part that can never fit.
+    const all = editor.getMarkdown();
+    const text = all.slice(0, MAX_PAGE_LENGTH);
+    let fellOff = all.slice(MAX_PAGE_LENGTH);
     const thisJob = job;
     busy = true;
     editor.setEditable(false);
@@ -457,13 +469,13 @@ async function search() {
                 },
             }, thisJob);
             number = found.number;
-            // The last bits are only known at the end.
-            if (shortLink(number).length > MAX_LINK_LENGTH) throw Object.assign(new Error("too long"), { fits: 0.99 });
+            fellOff = found.rest + fellOff;
             knownPages.set(number, found.text);
         }
         if (thisJob.aborted) return;
         stopWork();
         justFound = number;
+        lostEnd = fellOff;
         jumpTo(number);
     } catch (error) {
         if (thisJob.aborted) return;
@@ -471,10 +483,6 @@ async function search() {
         stopWork();
         busy = false;
         editor.setEditable(true);
-        if (error.fits !== undefined) {
-            showTooFull(error.fits);
-            return;
-        }
         showNote(
             error.fetchFailed
                 ? "The notebook slipped on the way to the desk. Shall I pick it up again?"

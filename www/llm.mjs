@@ -54,30 +54,53 @@ export class LanguageModel {
   }
 
   /**
-   * The page number (decimal string) of `text`.
+   * The page number (decimal string) of `text`, or of as much of it as fits.
    * @param onProgress called with (tokens done, tokens in total)
    * @param signal set `signal.aborted` to give up; the promise then rejects
-   * @param maxBits the largest page number allowed, in bits. For a text that
-   *   needs more, the promise rejects with an error whose `fits` says which
-   *   fraction of the text would have fit.
+   * @param maxBits the largest page number allowed, in bits
+   * @returns { number, text, rest }: the page, the text on it, and whatever
+   *   of `text` did not fit (empty if all of it did)
    */
   async encode(text, onProgress = () => {}, signal = {}, maxBits = Infinity) {
     const tokens = this.tokenize(text);
-    const encoder = new this.wasm.PageEncoder(this.model);
+    const fits = (number) => BigInt(number).toString(2).length <= maxBits;
+
+    // Encode until the text ends or the number has too many bits.
+    let encoder = new this.wasm.PageEncoder(this.model);
+    let kept = tokens.length;
     try {
       for (let i = 0; i < tokens.length; i++) {
         onProgress(i, tokens.length);
         await pause();
         if (signal.aborted) throw new Error("aborted");
         encoder.push(tokens[i]);
-        if (encoder.bits() > maxBits) throw Object.assign(new Error("too long"), { fits: i / tokens.length });
+        if (encoder.bits() > maxBits) {
+          kept = i;
+          break;
+        }
       }
     } catch (error) {
       encoder.free();
       throw error;
     }
     onProgress(tokens.length, tokens.length);
-    return encoder.finish();
+    let number = kept === tokens.length ? encoder.finish() : (encoder.free(), undefined);
+
+    // Too long: keep fewer tokens until the page fits. The model remembers
+    // what it worked out above, so trying again costs next to nothing.
+    while (number === undefined || !fits(number)) {
+      if (number !== undefined) kept -= 1;
+      // End on a whole word: stop before a token that starts a new one.
+      while (kept > 0 && !/^\s/.test(this.detokenize([tokens[kept]]))) kept -= 1;
+      encoder = new this.wasm.PageEncoder(this.model);
+      for (const token of tokens.slice(0, kept)) encoder.push(token);
+      number = encoder.finish();
+      if (kept === 0) break;
+    }
+
+    const whole = this.detokenize(tokens);
+    const onPage = this.detokenize(tokens.slice(0, kept)).replace(/\uFFFD+$/, "");
+    return { number, text: onPage, rest: kept === tokens.length ? "" : whole.slice(onPage.length) };
   }
 
   /**
