@@ -9,7 +9,8 @@ A page's text is compressed with a language model, the idea from 3Blue1Brown's
 [SmolLM2-135M](https://huggingface.co/HuggingFaceTB/SmolLM2-135M) predicts each next token and an
 arithmetic coder (`src/coder.rs`) spends about `-log2(probability)` bits on it. The resulting
 bits are the page number (the `#page=123...` in the URL), so text the model finds likely lands
-on low page numbers.
+on low page numbers. The link button copies a shorter address for the same page, with the
+number written in base 64 (`#Kx9...`).
 
 Decoding a page needs exactly the numbers that were produced when it was encoded, on every
 device. So the model does not run on a general runtime or a GPU but in `src/model.rs`, a

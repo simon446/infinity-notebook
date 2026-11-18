@@ -8,6 +8,7 @@ const pageNumberElement = document.getElementById('pagenum');
 const previousButton = document.getElementById('previous');
 const nextButton = document.getElementById('next');
 const randomButton = document.getElementById('random');
+const linkButton = document.getElementById('link');
 const sheet = document.getElementById('sheet');
 const tools = document.getElementById('tools');
 const note = document.getElementById('note');
@@ -292,13 +293,40 @@ function overfull(markdown) {
     return wasm.limit_string_length(markdown) !== markdown;
 }
 
-// Pages live in the URL as #page=<page number>. The older #p<page number>
-// still works.
+// A short link writes the page number in base 64 with the URL-safe alphabet:
+// six bits a character, where decimal digits carry a little over three.
+const SHORT_DIGITS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+function shortCode(number) {
+    let code = "";
+    for (let rest = BigInt(number); rest > 0n; rest >>= 6n) code = SHORT_DIGITS[Number(rest & 63n)] + code;
+    return code;
+}
+
+/** The address of a page, as short as it can be written. */
+function shortLink(number) {
+    const code = shortCode(number);
+    // A code that reads as "p" and digits would be taken for the older form
+    // of link to another page, so such a page keeps its long address.
+    const fragment = /^p\d+$/.test(code) ? 'page=' + number : code;
+    return window.location.href.split('#')[0] + '#' + fragment;
+}
+
+// Pages live in the URL as #page=<page number>. A short link (#<code>) and
+// the older #p<page number> lead to the same pages.
 function pageNumberFromHash() {
-    const match = /^#p(?:age=)?(\d+)$/.exec(window.location.hash);
-    if (!match) return undefined;
-    const number = BigInt(match[1]).toString();
-    return number === "0" ? undefined : number;
+    const hash = window.location.hash;
+    const decimal = /^#p(?:age=)?(\d+)$/.exec(hash);
+    let number;
+    if (decimal) {
+        number = BigInt(decimal[1]);
+    } else if (/^#[A-Za-z0-9_-]+$/.test(hash)) {
+        number = 0n;
+        for (const digit of hash.slice(1)) number = number * 64n + BigInt(SHORT_DIGITS.indexOf(digit));
+    } else {
+        return undefined;
+    }
+    return number === 0n ? undefined : number.toString();
 }
 
 function jumpTo(number) {
@@ -547,6 +575,38 @@ randomButton.addEventListener('click', function () {
     void randomButton.offsetWidth;
     randomButton.classList.add('rolling');
     jumpTo(number);
+});
+
+/** Copies text to the clipboard; false if the browser will not allow it. */
+async function copy(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch {
+        // Older browsers, and pages not served over HTTPS.
+        const field = document.createElement('textarea');
+        field.value = text;
+        field.style.cssText = 'position:fixed;opacity:0';
+        document.body.append(field);
+        field.select();
+        const copied = document.execCommand('copy');
+        field.remove();
+        return copied;
+    }
+}
+
+linkButton.addEventListener('click', async function () {
+    if (busy) return;
+    const link = shortLink(pageNumber);
+    const copied = await copy(link);
+    showNote(copied ? "Copied a short link to this page. Paste it anywhere to come back here." : `Here is a short link to this page: ${link}`);
+    // Make room again for the note that was up, if any.
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => {
+        if (busy) return;
+        if (searchMode) offerSearch();
+        else hideNote();
+    }, copied ? 3500 : 12000);
 });
 
 // The handwriting font arrives after the page; measure again once it has.

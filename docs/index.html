@@ -141,6 +141,7 @@
         .flip:active:not(:disabled) { transform: scale(.92); }
         .flip:disabled { opacity: .3; cursor: default; }
         .flip.dice { font-size: 22px; }
+        .flip svg { display: block; margin: auto; }
         .flip.dice.rolling { animation: roll .45s ease-out; }
         @keyframes roll { from { transform: rotate(-200deg) scale(.7); } to { transform: none; } }
 
@@ -402,6 +403,12 @@
             <input id="pagenum" class="pagenum" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Page number" title="Type a page number">
             <button id="next" class="flip" type="button" aria-label="Next page" title="Next page">&rsaquo;</button>
             <button id="random" class="flip dice" type="button" aria-label="Random page" title="Random page">&#127922;</button>
+            <button id="link" class="flip" type="button" aria-label="Copy a short link to this page" title="Copy a short link to this page">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M10 13.5a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/>
+                    <path d="M14 10.5a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/>
+                </svg>
+            </button>
         </header>
         <div id="tools" class="tools" role="toolbar" aria-label="Formatting">
             <button type="button" data-format="strong" aria-label="Bold" title="Bold" aria-pressed="false">B</button>
@@ -428,6 +435,6 @@
         Every page is already written. You are only finding it.
         &middot; <a href="https://github.com/simon446/infinity-notebook">Source on GitHub</a>
     </footer>
-    <script type="module" src="./index-RLUPRH5J.js"></script>
+    <script type="module" src="./index-K2OE2XPA.js"></script>
 </body>
 </html>
