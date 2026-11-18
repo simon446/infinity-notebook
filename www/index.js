@@ -120,7 +120,8 @@ let lastRequest = 0;
 const requests = new Map();
 
 function startWorker() {
-    worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+    // WORKER_FILE is the worker's file name, filled in by build.js.
+    worker = new Worker(new URL(WORKER_FILE, import.meta.url), { type: "module" });
     worker.onmessage = ({ data }) => {
         if (data.type === "fetched") {
             fetched = data.done / data.total;
@@ -203,12 +204,17 @@ const editor = createEditor(content, {
 function setWritingOnRules() {
     const ratio = window.devicePixelRatio || 1;
     const line = parseFloat(getComputedStyle(content).lineHeight);
+    // Measured on a hidden twin of the page, so the editor never sees it.
+    const twin = document.createElement('div');
+    twin.className = content.className;
+    twin.style.cssText = 'position:absolute;visibility:hidden;top:0;left:0;padding:0;min-height:0';
+    sheet.append(twin);
 
     const measure = (tag, inner = "") => {
         const probe = document.createElement(tag);
         probe.style.cssText = 'position:absolute;visibility:hidden;top:0;left:0;white-space:nowrap;margin:0';
         probe.innerHTML = `${inner}Hnmhi<span style="display:inline-block;width:0;height:0"></span>`;
-        content.append(probe);
+        twin.append(probe);
         const writing = probe.querySelector('strong, code') ?? probe;
         const style = getComputedStyle(writing);
         const baseline = probe.querySelector('span').getBoundingClientRect().top - probe.getBoundingClientRect().top;
@@ -234,6 +240,7 @@ function setWritingOnRules() {
         const kind = measure('p', inner);
         content.style.setProperty(`--shift-${name}`, `${(text.sink - kind.sink) / ratio}px`);
     }
+    twin.remove();
 }
 
 /**
@@ -542,8 +549,14 @@ randomButton.addEventListener('click', function () {
     jumpTo(number);
 });
 
+// The handwriting font arrives after the page; measure again once it has.
 setWritingOnRules();
-document.fonts?.ready.then(setWritingOnRules);
+if (document.fonts) {
+    document.fonts.ready.then(setWritingOnRules);
+    document.fonts.addEventListener('loadingdone', setWritingOnRules);
+    const sizes = ['400 19px', '700 19px', '700 34px'];
+    Promise.all(sizes.map((size) => document.fonts.load(`${size} Handlee`))).then(setWritingOnRules, () => {});
+}
 window.addEventListener('resize', setWritingOnRules);
 window.addEventListener('hashchange', showPage);
 showPage();

@@ -131,7 +131,13 @@
             cursor: pointer;
             -webkit-tap-highlight-color: transparent;
         }
-        .flip:hover:not(:disabled), .flip:focus-visible { background: color-mix(in srgb, var(--rule) 55%, transparent); color: var(--ink); outline: 0; }
+        .flip:focus-visible { background: color-mix(in srgb, var(--rule) 55%, transparent); color: var(--ink); outline: 0; }
+        /* Only where there is a pointer to hover with: a touch screen would
+           leave the last button tapped looking lit. */
+        @media (hover: hover) {
+            .flip:hover:not(:disabled), .tools button:hover { background: color-mix(in srgb, var(--rule) 55%, transparent); color: var(--ink); }
+            .note-action:hover { filter: brightness(1.35); }
+        }
         .flip:active:not(:disabled) { transform: scale(.92); }
         .flip:disabled { opacity: .3; cursor: default; }
         .flip.dice { font-size: 22px; }
@@ -163,7 +169,7 @@
             cursor: pointer;
             -webkit-tap-highlight-color: transparent;
         }
-        .tools button:hover, .tools button:focus-visible { background: color-mix(in srgb, var(--rule) 55%, transparent); color: var(--ink); outline: 0; }
+        .tools button:focus-visible { outline: 2px solid var(--faded-ink); outline-offset: -2px; }
         .tools button[aria-pressed="true"] { background: color-mix(in srgb, var(--rule) 80%, transparent); color: var(--ink); }
         .tools .italic { font-style: italic; }
         @media (pointer: coarse) {
@@ -209,9 +215,9 @@
         .content h1, .content h2, .content h3, .content h4, .content h5, .content h6, .content pre {
             line-height: calc(var(--lines) * var(--line));
         }
-        .content h1 { top: var(--shift-h1, 0px); }
-        .content h2 { top: var(--shift-h2, 0px); }
-        .content h3 { top: var(--shift-h3, 0px); }
+        .content h1 { top: var(--shift-h1, 11px); }
+        .content h2 { top: var(--shift-h2, -2px); }
+        .content h3 { top: var(--shift-h3, -1px); }
         .content h4, .content h5, .content h6 { top: var(--shift-h4, 0px); }
         .content pre { top: var(--shift-pre, 0px); }
         .content strong { top: var(--shift-strong, 0px); }
@@ -303,7 +309,7 @@
             cursor: pointer;
             -webkit-tap-highlight-color: transparent;
         }
-        .note-action:hover, .note-action:focus-visible { filter: brightness(1.35); outline: 0; }
+        .note-action:focus-visible { filter: brightness(1.35); outline: 0; }
         .note-action:active { transform: scale(.98); }
         .note-action[hidden] { display: none; }
 
@@ -391,6 +397,6 @@
         Every page is already written. You are only finding it.
         &middot; <a href="https://github.com/simon446/infinity-notebook">Source on GitHub</a>
     </footer>
-    <script type="module" src="./index.js"></script>
+    <script type="module" src="./index-HV47RK6S.js"></script>
 </body>
 </html>
