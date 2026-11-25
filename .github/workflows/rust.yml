@@ -39,6 +39,9 @@ jobs:
         npm run build
         rm -rf ../docs
         mv dist ../docs
+        # GitHub Pages reads the custom domain from this file. The build
+        # replaces docs/, so write it back every time.
+        echo simon446.me > ../docs/CNAME
     # GitHub Pages serves docs/ from master.
     - uses: stefanzweifel/git-auto-commit-action@v5
       if: github.event_name == 'push'
