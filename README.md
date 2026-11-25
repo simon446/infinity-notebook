@@ -37,6 +37,9 @@ breaks. Addresses in the text are shown as links without being stored as such.
 A page opens for reading: just the ruled page and its writing. The pencil in the corner
 brings out the page number, page flipping and formatting.
 
+Writing that has not been put on a page yet is kept as a draft in the browser's local
+storage, one per tab, and all drafts can be reopened from any tab.
+
 ## Building
 
 ```

@@ -17,10 +17,10 @@
     <meta property="og:title" content="Infinity Notebook">
     <meta property="og:description" content="Every text that fits on one page already has a page in this notebook. Write something and open the page it is on.">
     <meta property="og:url" content="https://simon446.me/">
-    <meta property="og:image" content="https://simon446.me/preview.png">
+    <meta property="og:image" content="https://simon446.me/card.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
-    <meta property="og:image:alt" content="A sheet of ruled notebook paper with the words Infinity Notebook written on it.">
+    <meta property="og:image:alt" content="A ruled page with the words Infinity Notebook written on it.">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="theme-color" content="#fdfcf9" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#13171d" media="(prefers-color-scheme: dark)">
@@ -78,16 +78,42 @@
             min-height: 100dvh;
         }
 
-        /* The pencil: all there is besides the page, until it is pressed. */
-        .edit {
+        /* The pencil: all there is besides the page, until it is pressed.
+           Beside it, how many drafts there are, if any. */
+        .corner {
             position: fixed;
             top: max(12px, env(safe-area-inset-top));
             right: max(12px, env(safe-area-inset-right));
             z-index: 3;
-            opacity: .45;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
+        .editing .corner { display: none; }
+        .edit { position: relative; opacity: .45; }
         .edit:focus-visible { opacity: 1; }
-        .editing .edit { display: none; }
+        /* A dot on the pencil: what is on the page is a draft, not the page. */
+        .unsaved .edit { opacity: .8; }
+        .unsaved .edit::after {
+            content: '';
+            position: absolute;
+            top: 7px; right: 7px;
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--accent);
+        }
+        .chip {
+            height: 28px;
+            padding: 0 11px;
+            border: 1px solid var(--rule);
+            border-radius: 999px;
+            background: var(--paper);
+            color: var(--faded-ink);
+            font: 600 12px/1 var(--ui);
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .chip[hidden] { display: none; }
 
         .icon {
             flex: none;
@@ -107,14 +133,30 @@
         .icon:focus-visible { outline: 2px solid var(--faded-ink); outline-offset: -2px; }
         .icon:active:not(:disabled) { transform: scale(.94); }
         .icon:disabled { opacity: .3; cursor: default; }
+        .icon[hidden] { display: none; }
         .icon.rolling svg { animation: roll .45s ease-out; }
+        /* An icon with a number on it */
+        .counted { position: relative; }
+        .counted span {
+            position: absolute;
+            top: 3px; right: 1px;
+            min-width: 16px;
+            height: 16px;
+            padding: 0 4px;
+            border-radius: 8px;
+            background: var(--ink);
+            color: var(--paper);
+            font: 700 10px/16px var(--ui);
+        }
         @keyframes roll { from { transform: rotate(-180deg) scale(.7); } }
         /* Only where there is a pointer to hover with: a touch screen would
            leave the last button tapped looking lit. */
         @media (hover: hover) {
             .edit:hover { opacity: 1; }
-            .icon:hover:not(:disabled), .tools button:hover { background: var(--rule); color: var(--ink); }
-            .done:hover, .note-action:hover { filter: brightness(1.15); }
+            .icon:hover:not(:disabled), .tools button:hover, .draft-open:hover:not(:disabled) { background: var(--rule); color: var(--ink); }
+            .chip:hover { color: var(--ink); }
+            .find:hover, .note-action:hover { filter: brightness(1.15); }
+            .draft-discard:hover:not(:disabled) { color: var(--accent); }
         }
 
         /* What the pencil brings out: the page number, page flipping and
@@ -155,22 +197,29 @@
             text-overflow: ellipsis;
         }
         .pagenum:focus { background: var(--rule); }
-        .done {
+        .find {
             flex: none;
             height: 34px;
-            margin-left: 6px;
+            margin: 0 4px 0 6px;
             padding: 0 14px;
-            border: 1px solid var(--rule);
+            border: 0;
             border-radius: 999px;
-            background: transparent;
-            color: var(--ink);
+            background: var(--ink);
+            color: var(--paper);
             font: 600 14px/1 var(--ui);
             white-space: nowrap;
             cursor: pointer;
             -webkit-tap-highlight-color: transparent;
         }
-        .done.primary { border-color: var(--ink); background: var(--ink); color: var(--paper); }
-        .done:focus-visible { outline: 2px solid var(--faded-ink); outline-offset: 2px; }
+        .find[hidden] { display: none; }
+        .find:focus-visible { outline: 2px solid var(--faded-ink); outline-offset: 2px; }
+
+        /* A narrow screen: closer together, so the page number keeps some room. */
+        @media (max-width: 480px) {
+            .page-row .icon { width: 34px; }
+            .find { margin: 0 2px; padding: 0 12px; font-size: 13px; }
+            .pagenum { padding: 0 2px; font-size: 14px; }
+        }
 
         .tools {
             height: 40px;
@@ -342,6 +391,53 @@
         .note-action:active { transform: scale(.98); }
         .note-action[hidden] { display: none; }
 
+        /* The list of drafts */
+        .drafts {
+            width: min(440px, calc(100% - 24px));
+            max-height: min(72vh, 560px);
+            padding: 6px 8px 10px;
+            border: 1px solid var(--rule);
+            border-radius: 18px;
+            background: var(--surface);
+            color: var(--ink);
+            box-shadow: 0 20px 60px var(--shadow);
+            font: 15px/1.4 var(--ui);
+        }
+        .drafts::backdrop { background: rgba(10, 15, 22, .28); }
+        .drafts header { display: flex; align-items: center; justify-content: space-between; padding-left: 10px; }
+        .drafts h2 { margin: 0; font: 600 16px/1 var(--ui); }
+        .drafts p { margin: 0 10px 8px; color: var(--faded-ink); font-size: 13px; }
+        .drafts ul { margin: 0; padding: 0; list-style: none; }
+        .drafts li { display: flex; align-items: center; gap: 4px; }
+        .draft-open {
+            flex: 1;
+            min-width: 0;
+            padding: 9px 10px;
+            border: 0;
+            border-radius: 10px;
+            background: transparent;
+            color: var(--ink);
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+        .draft-open strong, .draft-open span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .draft-open strong { font-weight: 600; }
+        .draft-open span { color: var(--faded-ink); font-size: 13px; }
+        .draft-open:disabled { opacity: .5; cursor: default; }
+        .draft-discard {
+            flex: none;
+            padding: 8px 10px;
+            border: 0;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--faded-ink);
+            font: 600 13px/1 var(--ui);
+            cursor: pointer;
+        }
+        .draft-discard.sure { color: var(--accent); }
+        .draft-discard:disabled { opacity: .4; cursor: default; }
+
         /* How far along the work is */
         .progress {
             position: relative;
@@ -379,7 +475,7 @@
                 color-scheme: light;
             }
             body { background: none; }
-            .bar, .edit, .note { display: none !important; }
+            .bar, .corner, .note, .drafts { display: none !important; }
             /* a full sheet of rules, however little is written on it */
             .notebook { min-height: calc(100vh - var(--line)); }
             .sheet, .editing .sheet {
@@ -410,9 +506,12 @@
 
 <body>
     <main class="notebook">
-        <button id="edit" class="icon edit" type="button" aria-label="Edit this page" title="Edit this page">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3"/><path d="m14.5 7.5 3 3"/></svg>
-        </button>
+        <div class="corner">
+            <button id="drafts-chip" class="chip" type="button" hidden><span></span></button>
+            <button id="edit" class="icon edit" type="button" aria-label="Edit this page" title="Edit this page">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3"/><path d="m14.5 7.5 3 3"/></svg>
+            </button>
+        </div>
         <header class="bar">
             <div class="bar-row page-row">
                 <button id="previous" class="icon" type="button" aria-label="Previous page" title="Previous page">
@@ -428,7 +527,14 @@
                 <button id="link" class="icon" type="button" aria-label="Copy a short link to this page" title="Copy a short link to this page">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13.5a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10.5a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/></svg>
                 </button>
-                <button id="done" class="done" type="button">Done</button>
+                <button id="drafts-button" class="icon counted" type="button" hidden>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13.5 6.5 5h11L20 13.5V18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 13.5h4.5l1 2h5l1-2H20"/></svg>
+                    <span></span>
+                </button>
+                <button id="find" class="find" type="button" hidden>Find page</button>
+                <button id="view" class="icon" type="button" aria-label="Back to reading" title="Back to reading">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+                </button>
             </div>
             <div id="tools" class="bar-row tools" role="toolbar" aria-label="Formatting">
                 <button type="button" data-format="strong" aria-label="Bold" title="Bold" aria-pressed="false">B</button>
@@ -449,6 +555,16 @@
             <button id="note-action" class="note-action" type="button" hidden></button>
         </aside>
     </main>
-    <script type="module" src="./index-2FJ7WQ42.js"></script>
+    <dialog id="drafts" class="drafts" aria-labelledby="drafts-title">
+        <header>
+            <h2 id="drafts-title">Drafts</h2>
+            <button id="drafts-close" class="icon" type="button" aria-label="Close">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/></svg>
+            </button>
+        </header>
+        <p>Writing that is not on a page yet. It is kept in this browser until you find its page or discard it.</p>
+        <ul id="draft-list"></ul>
+    </dialog>
+    <script type="module" src="./index-5AKNM7UX.js"></script>
 </body>
 </html>

@@ -16,7 +16,12 @@ const noteText = document.getElementById('note-text');
 const noteProgress = document.getElementById('note-progress');
 const noteAction = document.getElementById('note-action');
 const editButton = document.getElementById('edit');
-const doneButton = document.getElementById('done');
+const findButton = document.getElementById('find');
+const viewButton = document.getElementById('view');
+const draftsButton = document.getElementById('drafts-button');
+const draftsChip = document.getElementById('drafts-chip');
+const draftsDialog = document.getElementById('drafts');
+const draftList = document.getElementById('draft-list');
 
 // Without a keyboard there is no shortcut to mention.
 const touch = window.matchMedia('(pointer: coarse)').matches;
@@ -35,7 +40,6 @@ let written = "";        // the Markdown last put on the page
 let searchMode = false;  // the page was edited and can be searched for
 let busy = false;        // a page is being read or searched for
 let editing = false;     // the page can be written on, and its tools are out
-let leaveWhenFound = false; // the search under way was started by "Find page"
 let job = {};            // the work for the current page
 let justFound;           // the page number a search just led to
 let lostEnd = "";        // what that search could not fit on the page
@@ -387,11 +391,11 @@ function syncEditable() {
     editor.setEditable(editing && !busy);
 }
 
-/** The button that ends editing finds the page first if it was changed. */
-function showDone() {
-    doneButton.textContent = searchMode ? "Find page" : "Done";
-    doneButton.classList.toggle('primary', searchMode);
-    doneButton.title = searchMode && !touch ? `Find the page this is written on (${shortcut})` : "";
+/** "Find page" is there when the page has been changed, and so is a mark on the pencil. */
+function showFind() {
+    findButton.hidden = !searchMode;
+    findButton.title = touch ? "" : `Find the page this is written on (${shortcut})`;
+    document.body.classList.toggle('unsaved', searchMode);
 }
 
 /** The tab is named after the page's first large heading. */
@@ -410,9 +414,11 @@ async function showPage() {
     job.cancel?.();
     const thisJob = job = {};
     stopWork();
+    // Leaving a page with a draft on it: the draft is kept, to come back to.
+    if (draftId && pageNumber !== undefined && pageNumber !== number) letGoOfDraft();
     pageNumber = number;
     searchMode = false;
-    showDone();
+    showFind();
     showPageName();
     if (!knownPages.has(number)) window.document.title = BLANK_TITLE;
 
@@ -475,12 +481,24 @@ async function showPage() {
     }
     justFound = undefined;
     lostEnd = "";
+
+    // A draft that was waiting for this page goes back on it.
+    if (pendingDraft?.page === number) {
+        const draft = pendingDraft;
+        pendingDraft = undefined;
+        holdDraft(draft.id);
+        write(draft.text);
+        setEditing(true);
+        edited();
+        showNote("Picked up your draft where you left it.", { seconds: 3 });
+    } else {
+        pendingDraft = undefined;
+    }
 }
 
-/** Finds the page that what is written is on. `thenLeave` ends editing there. */
-async function search(thenLeave = false) {
+/** Finds the page that what is written is on. */
+async function search() {
     if (busy || !searchMode) return;
-    leaveWhenFound = thenLeave;
     // Far more than a page: do not even try the part that can never fit.
     const all = editor.getMarkdown();
     const text = all.slice(0, MAX_PAGE_LENGTH);
@@ -510,7 +528,9 @@ async function search(thenLeave = false) {
         stopWork();
         justFound = number;
         lostEnd = fellOff;
-        if (leaveWhenFound) setEditing(false);
+        // The writing has its page now. If some of it fell off, the draft is
+        // kept: it still holds what the page could not.
+        if (fellOff === "") forgetDraft(draftId);
         jumpTo(number);
     } catch (error) {
         if (thisJob.aborted) return;
@@ -521,7 +541,7 @@ async function search(thenLeave = false) {
             error.fetchFailed
                 ? "The notebook slipped on the way to the desk. Shall I pick it up again?"
                 : "I lost my place somewhere around page a-gazillion. Shall I start over?",
-            { action: { label: "Try again", run: () => search(thenLeave) } }
+            { action: { label: "Try again", run: search } }
         );
     }
 }
@@ -529,22 +549,218 @@ async function search(thenLeave = false) {
 /** The person changed the page. */
 function edited() {
     if (busy) return;
-    searchMode = editor.getMarkdown() !== pageContent;
-    showDone();
+    const text = editor.getMarkdown();
+    searchMode = text !== pageContent;
+    showFind();
     showTitle();
+    // Writing that is not on a page yet is kept as a draft from the first change.
+    if (searchMode && text.trim() !== "") {
+        if (!draftId) holdDraft(crypto.randomUUID?.() ?? String(Date.now()) + Math.random());
+        saveTimer ??= setTimeout(saveDraft, 400);
+    } else if (draftId) {
+        forgetDraft(draftId);
+    }
     // A note with a button on it stays until it has been dealt with.
     if (noteAction.hidden) hideNote();
 }
 
 editButton.addEventListener('click', () => setEditing(true));
+viewButton.addEventListener('click', () => setEditing(false));
+findButton.addEventListener('click', () => search());
 
-// "Done" puts the pencil down. If the page was changed it first finds the
-// page that the writing is on.
-doneButton.addEventListener('click', function () {
-    if (busy) return;
-    if (searchMode) search(true);
-    else setEditing(false);
+// Drafts: writing that has not been put on a page yet.
+//
+// Every draft is kept in this browser's storage from its first change until
+// its page is found or it is thrown away, so closing a tab, flipping to
+// another page or reloading never loses work. Each tab works on its own
+// draft, and all of them are listed under "Drafts", from any tab.
+const DRAFTS_KEY = "infinity-notebook-drafts";
+const TAB_DRAFT_KEY = "infinity-notebook-draft";    // which draft this tab is on, for reloads
+const DRAFT_LOCK = "infinity-notebook-draft-";      // held while a tab has the draft open
+
+let draftId;                    // the draft this tab is working on, if any
+let releaseDraft = () => {};    // lets go of its lock
+let saveTimer;                  // a save that is due
+let pendingDraft;               // a draft to put on the page once the page is there
+
+/** All drafts, most recently changed first: { id, page, text, updated }. */
+function readDrafts() {
+    try {
+        const drafts = JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? "[]");
+        return Array.isArray(drafts) ? drafts : [];
+    } catch {
+        return [];
+    }
+}
+
+function writeDrafts(drafts) {
+    try {
+        localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/** Makes `id` the draft this tab works on. */
+function holdDraft(id) {
+    releaseDraft();
+    draftId = id;
+    try { sessionStorage.setItem(TAB_DRAFT_KEY, id); } catch { /* reloading will not bring it back */ }
+    // Other tabs can tell from the lock that the draft is open here.
+    let release;
+    releaseDraft = () => release?.();
+    navigator.locks?.request(DRAFT_LOCK + id, () => new Promise((resolve) => {
+        release = resolve;
+        if (draftId !== id) resolve();
+    }));
+}
+
+/** Stops working on this tab's draft; it stays among the drafts. */
+function letGoOfDraft() {
+    if (saveTimer !== undefined) saveDraft();
+    draftId = undefined;
+    try { sessionStorage.removeItem(TAB_DRAFT_KEY); } catch { /* nothing to remove */ }
+    releaseDraft();
+    releaseDraft = () => {};
+}
+
+function saveDraft() {
+    clearTimeout(saveTimer);
+    saveTimer = undefined;
+    if (!draftId) return;
+    const drafts = readDrafts().filter((draft) => draft.id !== draftId);
+    drafts.unshift({ id: draftId, page: pageNumber, text: editor.getMarkdown(), updated: Date.now() });
+    if (!writeDrafts(drafts)) {
+        showNote("This browser has no room left to keep drafts, so this one is not being saved. Find its page, or throw away some old drafts.", { seconds: 8 });
+    }
+    showDraftCount();
+}
+
+/** Throws a draft away. */
+function forgetDraft(id) {
+    if (id === undefined) return;
+    if (id === draftId) {
+        clearTimeout(saveTimer);
+        saveTimer = undefined;
+        letGoOfDraft();
+    }
+    writeDrafts(readDrafts().filter((draft) => draft.id !== id));
+    showDraftCount();
+}
+
+/** The drafts that some tab has open right now. */
+async function openDraftIds() {
+    try {
+        const { held } = await navigator.locks.query();
+        return new Set(held.map((lock) => lock.name).filter((name) => name.startsWith(DRAFT_LOCK)).map((name) => name.slice(DRAFT_LOCK.length)));
+    } catch {
+        return new Set();
+    }
+}
+
+function showDraftCount() {
+    const count = readDrafts().length;
+    const label = count === 1 ? "1 draft" : `${count} drafts`;
+    for (const button of [draftsButton, draftsChip]) {
+        button.hidden = count === 0;
+        button.querySelector('span').textContent = button === draftsChip ? label : count;
+        button.setAttribute('aria-label', `${label}: writing not yet on a page`);
+    }
+    if (count === 0 && draftsDialog.open) draftsDialog.close();
+}
+
+/** What a draft is called in the list: its first line, without Markdown marks. */
+function draftName(text) {
+    const line = text.split('\n').map((line) => line.replace(/^[#>*\-\s\d.]+/, '').replace(/[*_`\\]/g, '').trim()).find((line) => line !== "");
+    return line ?? "Blank";
+}
+
+function timeAgo(time) {
+    const minutes = Math.round((Date.now() - time) / 60000);
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return `${minutes} min ago`;
+    if (minutes < 60 * 24) return `${Math.round(minutes / 60)} h ago`;
+    return new Date(time).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+async function showDrafts() {
+    if (saveTimer !== undefined) saveDraft();
+    const elsewhere = await openDraftIds();
+    draftList.textContent = "";
+    for (const draft of readDrafts()) {
+        const here = draft.id === draftId;
+        const taken = !here && elsewhere.has(draft.id);
+        const item = document.createElement('li');
+        const open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'draft-open';
+        open.disabled = taken;
+        const name = document.createElement('strong');
+        name.textContent = draftName(draft.text);
+        const details = document.createElement('span');
+        const where = here ? "open here" : taken ? "open in another tab" : timeAgo(draft.updated);
+        details.textContent = `${where} \u00b7 ${draft.text.length} characters`;
+        open.append(name, details);
+        open.addEventListener('click', () => openDraft(draft));
+
+        // Throwing a draft away takes two presses.
+        const discard = document.createElement('button');
+        discard.type = 'button';
+        discard.className = 'draft-discard';
+        discard.textContent = "Discard";
+        discard.disabled = taken;
+        discard.addEventListener('click', () => {
+            if (!discard.classList.contains('sure')) {
+                discard.classList.add('sure');
+                discard.textContent = "Really discard?";
+                return;
+            }
+            discardDraft(draft);
+        });
+        item.append(open, discard);
+        draftList.append(item);
+    }
+    if (!draftsDialog.open) draftsDialog.showModal();
+}
+
+/** Puts a draft back on the page it was started from, to go on writing. */
+function openDraft(draft) {
+    draftsDialog.close();
+    if (draft.id === draftId) {
+        setEditing(true);
+        return;
+    }
+    letGoOfDraft();
+    pendingDraft = draft;
+    if (draft.page === pageNumber) showPage();
+    else jumpTo(draft.page);
+}
+
+function discardDraft(draft) {
+    const here = draft.id === draftId;
+    forgetDraft(draft.id);
+    if (here && !busy) {
+        write(knownPages.get(pageNumber) ?? "");
+        edited();
+    }
+    if (draftsDialog.open) showDrafts();
+}
+
+draftsButton.addEventListener('click', showDrafts);
+draftsChip.addEventListener('click', showDrafts);
+document.getElementById('drafts-close').addEventListener('click', () => draftsDialog.close());
+draftsDialog.addEventListener('click', (e) => { if (e.target === draftsDialog) draftsDialog.close(); });
+
+// Another tab changed the drafts.
+window.addEventListener('storage', function (e) {
+    if (e.key !== DRAFTS_KEY) return;
+    showDraftCount();
+    if (draftsDialog.open) showDrafts();
 });
+// Do not leave a save waiting when the tab goes away.
+window.addEventListener('pagehide', () => { if (saveTimer !== undefined) saveDraft(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && saveTimer !== undefined) saveDraft(); });
 
 tools.addEventListener('mousedown', (e) => e.preventDefault()); // keep the cursor on the page
 tools.addEventListener('click', function (e) {
@@ -607,6 +823,10 @@ nextButton.addEventListener('click', () => flip(1n));
 // is being typed.
 document.addEventListener('keydown', function (e) {
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (e.key === 'Escape' && editing && !draftsDialog.open && document.activeElement !== pageNumberElement) {
+        setEditing(false);
+        return;
+    }
     const typing = editor.hasFocus() || document.activeElement === pageNumberElement;
     let pages;
     if (e.key === 'PageDown' || (e.key === 'ArrowRight' && !typing)) pages = 1n;
@@ -686,4 +906,14 @@ if (document.fonts) {
 }
 window.addEventListener('resize', setWritingOnRules);
 window.addEventListener('hashchange', showPage);
+
+// After a reload, go on with the draft this tab was working on, unless the
+// tab is a copy of one that still has it open.
+showDraftCount();
+try {
+    const id = sessionStorage.getItem(TAB_DRAFT_KEY);
+    const draft = id && readDrafts().find((draft) => draft.id === id);
+    if (draft && draft.page === pageNumberFromHash() && !(await openDraftIds()).has(id)) pendingDraft = draft;
+    else sessionStorage.removeItem(TAB_DRAFT_KEY);
+} catch { /* no storage: nothing to go on with */ }
 showPage();
