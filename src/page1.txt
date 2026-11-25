@@ -2,9 +2,9 @@
 
 Every text that fits on one page already has a page in this notebook. A page holds whatever fits in a link of 2000 characters: several thousand characters of ordinary writing, less of gibberish.
 
-Write something here, then press **Find this page** to open the page it is on.
+Press the pencil in the corner and write something, then press **Find page** to open the page it is on.
 
-Flip pages with the arrows, roll the dice for a random page, or type a page number at the top.
+The pencil also brings out the page number, arrows to flip pages, a dice for a random page, and a button that copies a short link.
 
 Pages are kept as Markdown, so **bold**, *italic*, headings, lists and quotes all work.
 

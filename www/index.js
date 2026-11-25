@@ -15,11 +15,15 @@ const note = document.getElementById('note');
 const noteText = document.getElementById('note-text');
 const noteProgress = document.getElementById('note-progress');
 const noteAction = document.getElementById('note-action');
-const baseTitle = window.document.title;
+const editButton = document.getElementById('edit');
+const doneButton = document.getElementById('done');
 
 // Without a keyboard there is no shortcut to mention.
 const touch = window.matchMedia('(pointer: coarse)').matches;
 const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "\u2318 + Enter" : "Ctrl + Enter";
+
+// A tab with nothing written in it, until the page has been read.
+const BLANK_TITLE = "\u200e";
 
 // Pages are Markdown. The page shows it as rich text, and gives it back in
 // one fixed spelling: `canonical(text)` is how `text` reads once on the page.
@@ -30,6 +34,8 @@ let pageContent = "";    // its Markdown as the page gives it back, once known
 let written = "";        // the Markdown last put on the page
 let searchMode = false;  // the page was edited and can be searched for
 let busy = false;        // a page is being read or searched for
+let editing = false;     // the page can be written on, and its tools are out
+let leaveWhenFound = false; // the search under way was started by "Find page"
 let job = {};            // the work for the current page
 let justFound;           // the page number a search just led to
 let lostEnd = "";        // what that search could not fit on the page
@@ -360,10 +366,37 @@ function jumpTo(number) {
     else window.location.hash = 'page=' + number;
 }
 
-function offerSearch() {
-    showNote("New words! Shall I find the page they are written on?", {
-        action: { label: touch ? "Find this page" : `Find this page (${shortcut})`, run: search },
-    });
+/**
+ * A page is for reading until the pencil is pressed. Then it can be written
+ * on, and the page number, the page flipping and the formatting come out.
+ */
+function setEditing(value) {
+    editing = value;
+    document.body.classList.toggle('editing', editing);
+    syncEditable();
+    if (editing) editor.focus();
+    else if (!busy) hideNote();
+}
+
+function setBusy(value) {
+    busy = value;
+    syncEditable();
+}
+
+function syncEditable() {
+    editor.setEditable(editing && !busy);
+}
+
+/** The button that ends editing finds the page first if it was changed. */
+function showDone() {
+    doneButton.textContent = searchMode ? "Find page" : "Done";
+    doneButton.classList.toggle('primary', searchMode);
+    doneButton.title = searchMode && !touch ? `Find the page this is written on (${shortcut})` : "";
+}
+
+/** The tab is named after the page's first large heading. */
+function showTitle() {
+    window.document.title = editor.title() || "Notes";
 }
 
 async function showPage() {
@@ -379,16 +412,16 @@ async function showPage() {
     stopWork();
     pageNumber = number;
     searchMode = false;
-    window.document.title = `${baseTitle} – Page ${pageName(number)}`;
+    showDone();
     showPageName();
+    if (!knownPages.has(number)) window.document.title = BLANK_TITLE;
 
     // What is on the page stays there until the new page differs from it, so
     // that flipping between similar pages does not flicker.
     const before = searchMode ? editor.getMarkdown() : written;
 
     if (!knownPages.has(number)) {
-        busy = true;
-        editor.setEditable(false);
+        setBusy(true);
         if (modelReady) hideNote();
         else showWork(describeFetching);
         let latest, frame;
@@ -414,7 +447,7 @@ async function showPage() {
             if (thisJob.aborted) return;
             console.error(error);
             stopWork();
-            busy = false;
+            setBusy(false);
             showNote(
                 error.fetchFailed
                     ? "The notebook slipped on the way to the desk. Shall I pick it up again?"
@@ -427,10 +460,10 @@ async function showPage() {
         stopWork();
     }
 
-    busy = false;
     write(knownPages.get(number));
     pageContent = editor.getMarkdown();
-    editor.setEditable(true);
+    setBusy(false);
+    showTitle();
     if (justFound === number && lostEnd !== "") {
         showFellOff(lostEnd);
     } else if (justFound === number) {
@@ -444,15 +477,16 @@ async function showPage() {
     lostEnd = "";
 }
 
-async function search() {
+/** Finds the page that what is written is on. `thenLeave` ends editing there. */
+async function search(thenLeave = false) {
     if (busy || !searchMode) return;
+    leaveWhenFound = thenLeave;
     // Far more than a page: do not even try the part that can never fit.
     const all = editor.getMarkdown();
     const text = all.slice(0, MAX_PAGE_LENGTH);
     let fellOff = all.slice(MAX_PAGE_LENGTH);
     const thisJob = job;
-    busy = true;
-    editor.setEditable(false);
+    setBusy(true);
     let done = 0, total = 0;
     showWork(() => {
         if (total === 0) return describeFetching();
@@ -476,18 +510,18 @@ async function search() {
         stopWork();
         justFound = number;
         lostEnd = fellOff;
+        if (leaveWhenFound) setEditing(false);
         jumpTo(number);
     } catch (error) {
         if (thisJob.aborted) return;
         console.error(error);
         stopWork();
-        busy = false;
-        editor.setEditable(true);
+        setBusy(false);
         showNote(
             error.fetchFailed
                 ? "The notebook slipped on the way to the desk. Shall I pick it up again?"
                 : "I lost my place somewhere around page a-gazillion. Shall I start over?",
-            { action: { label: "Try again", run: search } }
+            { action: { label: "Try again", run: () => search(thenLeave) } }
         );
     }
 }
@@ -495,14 +529,22 @@ async function search() {
 /** The person changed the page. */
 function edited() {
     if (busy) return;
-    if (editor.getMarkdown() === pageContent) {
-        searchMode = false;
-        hideNote();
-    } else {
-        searchMode = true;
-        offerSearch();
-    }
+    searchMode = editor.getMarkdown() !== pageContent;
+    showDone();
+    showTitle();
+    // A note with a button on it stays until it has been dealt with.
+    if (noteAction.hidden) hideNote();
 }
+
+editButton.addEventListener('click', () => setEditing(true));
+
+// "Done" puts the pencil down. If the page was changed it first finds the
+// page that the writing is on.
+doneButton.addEventListener('click', function () {
+    if (busy) return;
+    if (searchMode) search(true);
+    else setEditing(false);
+});
 
 tools.addEventListener('mousedown', (e) => e.preventDefault()); // keep the cursor on the page
 tools.addEventListener('click', function (e) {
@@ -543,8 +585,7 @@ pageNumberElement.addEventListener('blur', function () {
     clearTimeout(noteTimer);
     noteTimer = setTimeout(() => {
         if (busy) return;
-        if (searchMode) offerSearch();
-        else hideNote();
+        hideNote();
     }, 4000);
 });
 
@@ -631,8 +672,7 @@ linkButton.addEventListener('click', async function () {
     clearTimeout(noteTimer);
     noteTimer = setTimeout(() => {
         if (busy) return;
-        if (searchMode) offerSearch();
-        else hideNote();
+        hideNote();
     }, copied ? 3500 : 12000);
 });
 

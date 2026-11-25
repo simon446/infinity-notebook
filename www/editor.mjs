@@ -15,7 +15,7 @@ import {
 import { Schema } from "prosemirror-model";
 import { liftListItem, sinkListItem, wrapInList } from "prosemirror-schema-list";
 import { EditorState, Plugin } from "prosemirror-state";
-import { EditorView } from "prosemirror-view";
+import { Decoration, DecorationSet, EditorView } from "prosemirror-view";
 
 // The Markdown schema without images: a page is text, and a random page
 // should not make the browser fetch whatever address it happens to name.
@@ -31,49 +31,27 @@ const schema = new Schema({
     .update("heading", { ...markdownSchema.spec.nodes.get("heading"), content: "inline*" })
     .update("bullet_list", tightByDefault("bullet_list"))
     .update("ordered_list", tightByDefault("ordered_list")),
-  // Links open in a new tab and tell the site nothing about this page.
-  marks: markdownSchema.spec.marks.update("link", {
-    ...markdownSchema.spec.marks.get("link"),
-    toDOM: (mark) => ["a", { ...mark.attrs, target: "_blank", rel: "noopener noreferrer nofollow" }],
-  }),
+  // No links either. An address in the text is shown as a link (see
+  // linkAddresses), but the text itself stays plain: what you type is what
+  // the page holds.
+  marks: markdownSchema.spec.marks.remove("link"),
 });
 
 // A line break in the text is a line break on the page, both ways. (Plain
-// Markdown would join the lines and write a break as a backslash.)
-//
-// Addresses written out with their scheme (https://...) are links without any
-// Markdown around them.
-const markdownIt = MarkdownIt("commonmark", { html: false, linkify: true }).enable("linkify").disable("image");
+// Markdown would join the lines and write a break as a backslash.) With no
+// links, [text](address) and <address> are ordinary text.
+const markdownIt = MarkdownIt("commonmark", { html: false }).disable(["image", "link", "autolink"]);
+// Only addresses written out with their scheme (https://...) count as links.
 const linkify = markdownIt.linkify.set({ fuzzyLink: false, fuzzyEmail: false });
 
-const { image: _imageToken, ...tokens } = defaultMarkdownParser.tokens;
+const { image: _imageToken, link: _linkToken, ...tokens } = defaultMarkdownParser.tokens;
 const parser = new MarkdownParser(schema, markdownIt, {
   ...tokens,
   softbreak: { node: "hard_break" },
 });
 
-/** The link `text` is on its own, if all of it is one address. */
-function addressOf(text) {
-  const matches = linkify.match(text);
-  if (matches?.length === 1 && matches[0].index === 0 && matches[0].lastIndex === text.length) return matches[0].url;
-  return undefined;
-}
-
-/** True for a link that is just its address, which is written without brackets. */
-function isBareAddress(link, parent, index) {
-  const content = parent.child(index);
-  return (
-    !link.attrs.title &&
-    content.isText &&
-    content.marks[content.marks.length - 1] === link &&
-    (index === parent.childCount - 1 || !link.isInSet(parent.child(index + 1).marks)) &&
-    addressOf(content.text) === link.attrs.href
-  );
-}
-
-const defaultLink = defaultMarkdownSerializer.marks.link;
-
 const { image: _imageNode, ...nodes } = defaultMarkdownSerializer.nodes;
+const { link: _linkMark, ...marks } = defaultMarkdownSerializer.marks;
 const serializer = new MarkdownSerializer(
   {
     ...nodes,
@@ -86,23 +64,7 @@ const serializer = new MarkdownSerializer(
       }
     },
   },
-  {
-    ...defaultMarkdownSerializer.marks,
-    link: {
-      ...defaultLink,
-      open(state, mark, parent, index) {
-        state.bareAddress = isBareAddress(mark, parent, index);
-        if (!state.bareAddress) return defaultLink.open(state, mark, parent, index);
-        state.inAutolink = true; // the address is written as it is, unescaped
-        return "";
-      },
-      close(state, mark, parent, index) {
-        if (!state.bareAddress) return defaultLink.close(state, mark, parent, index);
-        state.bareAddress = state.inAutolink = undefined;
-        return "";
-      },
-    },
-  }
+  marks
 );
 
 const parse = (markdown) => parser.parse(markdown) ?? schema.topNodeType.createAndFill();
@@ -113,60 +75,51 @@ export function canonical(markdown) {
   return serialize(parse(markdown));
 }
 
-/**
- * Keeps addresses linked while typing: every address in the text is a link,
- * and a link that was made this way goes away when its text stops being one.
- * Links with a text of their own, as in [text](address), are left alone.
- */
+/** Draws every address in the text as a link, without changing the text. */
+function findAddresses(doc) {
+  const links = [];
+  doc.descendants((block, blockStart) => {
+    if (!block.isTextblock) return true;
+    if (block.type.spec.code) return false;
+    // The block's text, with a line break standing in for anything that is
+    // not text (which is a line break). Offsets in it are then offsets in
+    // the block, and an address ends where its line does.
+    const text = block.textBetween(0, block.content.size, undefined, "\n");
+    const from = blockStart + 1;
+    for (const match of linkify.match(text) ?? []) {
+      const [start, end] = [from + match.index, from + match.lastIndex];
+      if (doc.rangeHasMark(start, end, schema.marks.code)) continue;
+      links.push(Decoration.inline(start, end, {
+        nodeName: "a",
+        href: match.url,
+        // Open in a new tab, and tell the site nothing about this page.
+        target: "_blank",
+        rel: "noopener noreferrer nofollow",
+      }));
+    }
+    return false;
+  });
+  return DecorationSet.create(doc, links);
+}
+
 const linkAddresses = new Plugin({
-  appendTransaction(transactions, _before, state) {
-    if (!transactions.some((transaction) => transaction.docChanged)) return null;
-    const { link, code } = schema.marks;
-    const transaction = state.tr;
-    state.doc.descendants((block, blockStart) => {
-      if (!block.isTextblock) return true;
-      if (block.type.spec.code) return false;
-      // The block's text, with a placeholder for anything that is not text,
-      // so that offsets in it are offsets in the block.
-      const text = block.textBetween(0, block.content.size, undefined, "\ufffc");
-      const from = blockStart + 1;
-      const addresses = (linkify.match(text) ?? []).filter(
-        (match) => !state.doc.rangeHasMark(from + match.index, from + match.lastIndex, code)
-      );
-
-      // Drop links that are an address no longer found where they are.
-      let offset = 0;
-      block.forEach((child) => {
-        const mark = link.isInSet(child.marks);
-        const [start, end] = [offset, offset + child.nodeSize];
-        offset = end;
-        if (!mark || !child.isText || mark.attrs.title || addressOf(child.text) !== mark.attrs.href) return;
-        if (!addresses.some((match) => match.index === start && match.lastIndex === end && match.url === mark.attrs.href)) {
-          transaction.removeMark(from + start, from + end, link);
-        }
-      });
-
-      for (const match of addresses) {
-        const [start, end] = [from + match.index, from + match.lastIndex];
-        let linked = true;
-        let other = false;
-        state.doc.nodesBetween(start, end, (node) => {
-          if (!node.isInline) return;
-          const mark = link.isInSet(node.marks);
-          if (!mark) linked = false;
-          else if (mark.attrs.href !== match.url) other = true;
-        });
-        if (other) transaction.removeMark(start, end, link);
-        if (other || !linked) transaction.addMark(start, end, link.create({ href: match.url }));
-      }
-      return false;
-    });
-    return transaction.docChanged ? transaction : null;
+  state: {
+    init: (_config, state) => findAddresses(state.doc),
+    apply: (transaction, links) => (transaction.docChanged ? findAddresses(transaction.doc) : links),
+  },
+  props: {
+    decorations(state) {
+      return linkAddresses.getState(state);
+    },
   },
 });
 
-/** Opens the link under a click or tap, if it leads somewhere ordinary. */
-function openLink(_view, _position, event) {
+/**
+ * Opens the link under a click or tap while the page is being edited. (A page
+ * that is only being read has ordinary links, which the browser opens.)
+ */
+function openLink(view, _position, event) {
+  if (!view.editable) return false;
   const anchor = event.target.closest?.("a[href]");
   if (!anchor || event.button !== 0) return false;
   let address;
@@ -288,6 +241,17 @@ export function createEditor(mount, { onEdit, onSubmit, onState }) {
     },
 
     hasFocus: () => view.hasFocus(),
+
+    focus: () => view.focus(),
+
+    /** The page's first large heading, if it has one. */
+    title() {
+      let title;
+      view.state.doc.forEach((node) => {
+        if (title === undefined && node.type === schema.nodes.heading && node.attrs.level === 1) title = node.textContent.trim();
+      });
+      return title;
+    },
 
     /** Runs a formatting command by name, keeping the cursor on the page. */
     run(name) {

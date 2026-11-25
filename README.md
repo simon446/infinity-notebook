@@ -1,6 +1,6 @@
 # Infinity Notebook
 
-See https://simon446.github.io/infinity-notebook/
+See https://simon446.me/
 
 ## How pages are numbered
 
@@ -31,7 +31,11 @@ python3 tools/convert_weights.py model.safetensors www/model
 
 A page is edited as rich text and kept as Markdown: the Markdown is what gets a page number.
 The editor (`www/editor.mjs`) is [ProseMirror](https://prosemirror.net) with its own
-`prosemirror-markdown`, without images, and with line breaks kept as line breaks.
+`prosemirror-markdown`, without images or link syntax, and with line breaks kept as line
+breaks. Addresses in the text are shown as links without being stored as such.
+
+A page opens for reading: just the ruled page and its writing. The pencil in the corner
+brings out the page number, page flipping and formatting.
 
 ## Building
 
