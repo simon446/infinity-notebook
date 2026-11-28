@@ -22,6 +22,7 @@ const draftsButton = document.getElementById('drafts-button');
 const draftsChip = document.getElementById('drafts-chip');
 const draftsDialog = document.getElementById('drafts');
 const draftList = document.getElementById('draft-list');
+const visitedList = document.getElementById('visited-list');
 
 // Without a keyboard there is no shortcut to mention.
 const touch = window.matchMedia('(pointer: coarse)').matches;
@@ -414,6 +415,7 @@ async function showPage() {
     job.cancel?.();
     const thisJob = job = {};
     stopWork();
+    clearTimeout(visitTimer);
     // Leaving a page with a draft on it: the draft is kept, to come back to.
     if (draftId && pageNumber !== undefined && pageNumber !== number) letGoOfDraft();
     pageNumber = number;
@@ -479,6 +481,13 @@ async function showPage() {
     } else {
         hideNote();
     }
+    // The page has been visited once it has stayed up for a moment, or at
+    // once if it was searched for.
+    clearTimeout(visitTimer);
+    const visited = () => rememberVisit(number, knownPages.get(number));
+    if (justFound === number) visited();
+    else visitTimer = setTimeout(visited, 1000 * VISIT_SECONDS);
+
     justFound = undefined;
     lostEnd = "";
 
@@ -634,7 +643,7 @@ function saveDraft() {
     if (!writeDrafts(drafts)) {
         showNote("This browser has no room left to keep drafts, so this one is not being saved. Find its page, or throw away some old drafts.", { seconds: 8 });
     }
-    showDraftCount();
+    showKept();
 }
 
 /** Throws a draft away. */
@@ -646,7 +655,7 @@ function forgetDraft(id) {
         letGoOfDraft();
     }
     writeDrafts(readDrafts().filter((draft) => draft.id !== id));
-    showDraftCount();
+    showKept();
 }
 
 /** The drafts that some tab has open right now. */
@@ -659,15 +668,59 @@ async function openDraftIds() {
     }
 }
 
-function showDraftCount() {
-    const count = readDrafts().length;
-    const label = count === 1 ? "1 draft" : `${count} drafts`;
+/** Shows how to get to what this browser keeps, if it keeps anything. */
+function showKept() {
+    const drafts = readDrafts().length;
+    const pages = readVisited().length;
+    const label = [
+        drafts === 1 ? "1 draft" : drafts > 1 ? `${drafts} drafts` : "",
+        pages > 0 ? "pages you have visited" : "",
+    ].filter(Boolean).join(" and ");
     for (const button of [draftsButton, draftsChip]) {
-        button.hidden = count === 0;
-        button.querySelector('span').textContent = button === draftsChip ? label : count;
-        button.setAttribute('aria-label', `${label}: writing not yet on a page`);
+        button.hidden = drafts + pages === 0;
+        const count = button.querySelector('span');
+        count.hidden = drafts === 0;
+        count.textContent = drafts;
+        button.title = label.charAt(0).toUpperCase() + label.slice(1);
+        button.setAttribute('aria-label', button.title);
     }
-    if (count === 0 && draftsDialog.open) draftsDialog.close();
+    if (drafts + pages === 0 && draftsDialog.open) draftsDialog.close();
+}
+
+// Pages that have been visited, with their text, so they can be found again
+// and open at once. A page counts once it has been on screen for a moment,
+// which leaves out the ones flipped past.
+const VISITED_KEY = "infinity-notebook-pages";
+const MAX_VISITED = 100;
+const VISIT_SECONDS = 3;
+let visitTimer;
+
+/** Visited pages, most recent first: { page, text, visited }. */
+function readVisited() {
+    try {
+        const pages = JSON.parse(localStorage.getItem(VISITED_KEY) ?? "[]");
+        return Array.isArray(pages) ? pages : [];
+    } catch {
+        return [];
+    }
+}
+
+function writeVisited(pages) {
+    // If there is no room, the oldest pages make way.
+    for (let kept = pages.slice(0, MAX_VISITED); ; kept = kept.slice(0, Math.floor(kept.length / 2))) {
+        try {
+            localStorage.setItem(VISITED_KEY, JSON.stringify(kept));
+            break;
+        } catch {
+            if (kept.length === 0) break;
+        }
+    }
+    showKept();
+}
+
+function rememberVisit(page, text) {
+    if (page === "1" || text.trim() === "") return;
+    writeVisited([{ page, text, visited: Date.now() }, ...readVisited().filter((visit) => visit.page !== page)]);
 }
 
 /** What a draft is called in the list: its first line, without Markdown marks. */
@@ -684,43 +737,80 @@ function timeAgo(time) {
     return new Date(time).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
+/**
+ * A row of the list: a button that opens the thing, and one that removes it,
+ * which takes two presses.
+ */
+function keptRow({ name, details, disabled, open, remove, removeLabel }) {
+    const item = document.createElement('li');
+    const opener = document.createElement('button');
+    opener.type = 'button';
+    opener.className = 'draft-open';
+    opener.disabled = disabled;
+    const title = document.createElement('strong');
+    title.textContent = name;
+    const line = document.createElement('span');
+    line.textContent = details;
+    opener.append(title, line);
+    opener.addEventListener('click', open);
+
+    const remover = document.createElement('button');
+    remover.type = 'button';
+    remover.className = 'draft-discard';
+    remover.textContent = removeLabel;
+    remover.disabled = disabled;
+    remover.addEventListener('click', () => {
+        if (!remover.classList.contains('sure')) {
+            remover.classList.add('sure');
+            remover.textContent = `Really ${removeLabel.toLowerCase()}?`;
+            return;
+        }
+        remove();
+    });
+    item.append(opener, remover);
+    return item;
+}
+
+/** Shows what this browser keeps: drafts, and the pages that were visited. */
 async function showDrafts() {
     if (saveTimer !== undefined) saveDraft();
     const elsewhere = await openDraftIds();
+    const drafts = readDrafts();
     draftList.textContent = "";
-    for (const draft of readDrafts()) {
+    for (const draft of drafts) {
         const here = draft.id === draftId;
         const taken = !here && elsewhere.has(draft.id);
-        const item = document.createElement('li');
-        const open = document.createElement('button');
-        open.type = 'button';
-        open.className = 'draft-open';
-        open.disabled = taken;
-        const name = document.createElement('strong');
-        name.textContent = draftName(draft.text);
-        const details = document.createElement('span');
         const where = here ? "open here" : taken ? "open in another tab" : timeAgo(draft.updated);
-        details.textContent = `${where} \u00b7 ${draft.text.length} characters`;
-        open.append(name, details);
-        open.addEventListener('click', () => openDraft(draft));
-
-        // Throwing a draft away takes two presses.
-        const discard = document.createElement('button');
-        discard.type = 'button';
-        discard.className = 'draft-discard';
-        discard.textContent = "Discard";
-        discard.disabled = taken;
-        discard.addEventListener('click', () => {
-            if (!discard.classList.contains('sure')) {
-                discard.classList.add('sure');
-                discard.textContent = "Really discard?";
-                return;
-            }
-            discardDraft(draft);
-        });
-        item.append(open, discard);
-        draftList.append(item);
+        draftList.append(keptRow({
+            name: draftName(draft.text),
+            details: `${where} \u00b7 ${draft.text.length} characters`,
+            disabled: taken,
+            open: () => openDraft(draft),
+            remove: () => discardDraft(draft),
+            removeLabel: "Discard",
+        }));
     }
+    document.getElementById('drafts-section').hidden = drafts.length === 0;
+
+    const visits = readVisited();
+    visitedList.textContent = "";
+    for (const visit of visits) {
+        visitedList.append(keptRow({
+            name: draftName(visit.text),
+            details: `${visit.page === pageNumber ? "this page" : timeAgo(visit.visited)} \u00b7 ${visit.text.length} characters`,
+            disabled: false,
+            open: () => {
+                draftsDialog.close();
+                jumpTo(visit.page);
+            },
+            remove: () => {
+                writeVisited(readVisited().filter((other) => other.page !== visit.page));
+                if (draftsDialog.open) showDrafts();
+            },
+            removeLabel: "Forget",
+        }));
+    }
+    document.getElementById('visited-section').hidden = visits.length === 0;
     if (!draftsDialog.open) draftsDialog.showModal();
 }
 
@@ -754,8 +844,8 @@ draftsDialog.addEventListener('click', (e) => { if (e.target === draftsDialog) d
 
 // Another tab changed the drafts.
 window.addEventListener('storage', function (e) {
-    if (e.key !== DRAFTS_KEY) return;
-    showDraftCount();
+    if (e.key !== DRAFTS_KEY && e.key !== VISITED_KEY) return;
+    showKept();
     if (draftsDialog.open) showDrafts();
 });
 // Do not leave a save waiting when the tab goes away.
@@ -907,9 +997,14 @@ if (document.fonts) {
 window.addEventListener('resize', setWritingOnRules);
 window.addEventListener('hashchange', showPage);
 
+// Pages visited before open at once, from what was kept of them.
+for (const visit of readVisited()) {
+    if (!knownPages.has(visit.page)) knownPages.set(visit.page, visit.text);
+}
+
 // After a reload, go on with the draft this tab was working on, unless the
 // tab is a copy of one that still has it open.
-showDraftCount();
+showKept();
 try {
     const id = sessionStorage.getItem(TAB_DRAFT_KEY);
     const draft = id && readDrafts().find((draft) => draft.id === id);
