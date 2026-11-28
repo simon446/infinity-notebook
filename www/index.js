@@ -410,7 +410,7 @@ const favicon = document.getElementById('favicon');
 const BLANK_ICON = favicon.href;
 const NOTEBOOK_ICON = new URL('./favicon.ico', document.baseURI).href;
 // An emoji, with what may be joined to it: a skin tone, another emoji, a flag's second letter.
-const EMOJI = /\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}|[\u{1F3FB}-\u{1F3FF}])*|[\u{1F1E6}-\u{1F1FF}]{2}/u;
+const EMOJI = /^(?:\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}|[\u{1F3FB}-\u{1F3FF}])*|[\u{1F1E6}-\u{1F1FF}]{2})/u;
 const emojiIcons = new Map();
 
 /** An emoji as a picture for the tab. */
@@ -437,13 +437,14 @@ function showIcon(href) {
 }
 
 /**
- * The tab is named after the page's first large heading, and its icon is
- * that heading's first emoji, or else the notebook.
+ * The tab is named after the page's first large heading. An emoji that the
+ * heading starts with becomes the tab's icon, in place of the notebook, and
+ * is left out of the name.
  */
 function showTitle() {
-    const title = editor.title();
-    window.document.title = title || "Notes";
-    const emoji = title && EMOJI.exec(title)?.[0];
+    const title = editor.title() ?? "";
+    const emoji = EMOJI.exec(title)?.[0];
+    window.document.title = (emoji ? title.slice(emoji.length).trim() : title) || "Notes";
     showIcon(emoji ? emojiIcon(emoji) : NOTEBOOK_ICON);
 }
 
