@@ -203,19 +203,41 @@ function draw(source) {
 /**
  * Puts a drawing in its place. It keeps its own size, where the writing in it
  * is as large as the writing on the page, unless that is wider than the
- * window: then all of it shrinks to fit. It takes up whole lines.
+ * window: then all of it shrinks to fit. It takes up whole lines. Its title
+ * is taken out of the drawing and written on the page, on the rules, with
+ * room between it and the drawing.
  */
 function place(figure, svg) {
   figure.innerHTML = svg;
   const picture = figure.querySelector("svg");
   if (!picture) return;
   picture.removeAttribute("style");
+  figure.classList.add("drawn");
   const box = picture.viewBox.baseVal;
-  const width = picture.width.baseVal.unitType === SVGLength.SVG_LENGTHTYPE_PERCENTAGE || !picture.getAttribute("width") ? box.width : picture.width.baseVal.value;
+  let width = picture.width.baseVal.unitType === SVGLength.SVG_LENGTHTYPE_PERCENTAGE || !picture.getAttribute("width") ? box.width : picture.width.baseVal.value;
+  let caption;
+  const title = picture.querySelector('text[class$="TitleText"], text.titleText');
+  if (title?.textContent.trim()) {
+    caption = document.createElement("figcaption");
+    caption.textContent = title.textContent.trim();
+    title.remove();
+    // the drawing is now only what is left of it
+    const rest = picture.getBBox();
+    if (rest.width > 0 && rest.height > 0) {
+      const edge = 3; // the strokes are drawn a little outside their shapes
+      picture.setAttribute("viewBox", `${rest.x - edge} ${rest.y - edge} ${rest.width + 2 * edge} ${rest.height + 2 * edge}`);
+      width = rest.width + 2 * edge;
+    }
+    figure.prepend(caption);
+  }
   picture.setAttribute("width", width);
   picture.removeAttribute("height");
-  figure.classList.add("drawn");
-  const fit = () => { figure.style.height = `${Math.ceil(picture.getBoundingClientRect().height / LINE) * LINE}px`; };
+  const fit = () => {
+    const titled = caption ? caption.getBoundingClientRect().height : 0;
+    // under a title, the drawing gets at least half a line above and below
+    const drawing = picture.getBoundingClientRect().height + (caption ? LINE : 0);
+    figure.style.height = `${titled + Math.ceil(drawing / LINE) * LINE}px`;
+  };
   figure.style.height = "";
   fit();
   figure.refit = fit;

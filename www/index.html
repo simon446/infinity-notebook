@@ -426,14 +426,16 @@
            narrow. It takes up whole lines (extras.mjs sets its height). */
         .reading .diagram {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
             margin-left: calc(50% - 50vw + 12px);
             margin-right: calc(50% - 50vw + 12px);
             margin-bottom: 0;
         }
         .reading .diagram:not(.drawn) { display: block; margin-left: 0; margin-right: 0; }
-        .reading .diagram svg { display: block; max-width: 100%; height: auto; overflow: visible; }
+        .reading .diagram svg { display: block; flex: none; margin: auto; max-width: 100%; height: auto; overflow: visible; }
+        /* its title is writing like any other, on the rules */
+        .reading .diagram figcaption { flex: none; max-width: 100%; text-align: center; }
         .reading .diagram svg text, .reading .diagram svg tspan { font-family: 'Handlee', 'Comic Sans MS', cursive; }
         /* a label on a line hides the line behind it */
         .reading .diagram .edgeLabel rect.background, .reading .diagram .labelBkg { fill: var(--paper) !important; stroke: none !important; opacity: 1 !important; }
