@@ -25,7 +25,8 @@
     <meta name="theme-color" content="#fdfcf9" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#13171d" media="(prefers-color-scheme: dark)">
 
-    <link rel="icon" href="./favicon.ico">
+    <!-- Blank until the page has been read: index.js then picks the icon. -->
+    <link rel="icon" id="favicon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNgYGBgAAAABQABeqhXUAAAAABJRU5ErkJggg==">
     <link rel="apple-touch-icon" href="./apple-touch-icon.png">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -321,7 +322,8 @@
         /* The marks of the syntax stay where they are, a little fainter. */
         .source .syntax { color: var(--faded-ink); font-weight: normal; }
         .source .quote { color: var(--faded-ink); }
-        .source .code { font: 16px var(--mono); }
+        /* (not the font shorthand: that would undo the height of the line) */
+        .source .code { font-family: var(--mono); font-size: 16px; }
 
         .reading ol { padding-left: 1.3em; }
         /* A bullet is a dash written in front of the item, in the same hand. */
@@ -344,6 +346,9 @@
             border-radius: 4px;
         }
         .reading pre {
+            /* the same hand as the code in it: the block's own font also
+               decides where its lines stand, and differs between devices */
+            font-family: var(--mono);
             font-size: 16px;
             padding: 0 10px;
             border-radius: 6px;

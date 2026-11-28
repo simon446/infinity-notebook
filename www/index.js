@@ -406,9 +406,45 @@ function showFind() {
     document.body.classList.toggle('unsaved', searchMode);
 }
 
-/** The tab is named after the page's first large heading. */
+const favicon = document.getElementById('favicon');
+const BLANK_ICON = favicon.href;
+const NOTEBOOK_ICON = new URL('./favicon.ico', document.baseURI).href;
+// An emoji, with what may be joined to it: a skin tone, another emoji, a flag's second letter.
+const EMOJI = /\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}|[\u{1F3FB}-\u{1F3FF}])*|[\u{1F1E6}-\u{1F1FF}]{2}/u;
+const emojiIcons = new Map();
+
+/** An emoji as a picture for the tab. */
+function emojiIcon(emoji) {
+    if (!emojiIcons.has(emoji)) {
+        const size = 64;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const context = canvas.getContext('2d');
+        context.font = `${size * 0.85}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+        context.textBaseline = 'alphabetic';
+        // in the middle, by where its ink is and not by its line
+        const ink = context.measureText(emoji);
+        const x = (size - (ink.actualBoundingBoxRight - ink.actualBoundingBoxLeft)) / 2;
+        const y = (size + ink.actualBoundingBoxAscent - ink.actualBoundingBoxDescent) / 2;
+        context.fillText(emoji, x, y);
+        emojiIcons.set(emoji, canvas.toDataURL('image/png'));
+    }
+    return emojiIcons.get(emoji);
+}
+
+function showIcon(href) {
+    if (favicon.href !== href) favicon.href = href;
+}
+
+/**
+ * The tab is named after the page's first large heading, and its icon is
+ * that heading's first emoji, or else the notebook.
+ */
 function showTitle() {
-    window.document.title = editor.title() || "Notes";
+    const title = editor.title();
+    window.document.title = title || "Notes";
+    const emoji = title && EMOJI.exec(title)?.[0];
+    showIcon(emoji ? emojiIcon(emoji) : NOTEBOOK_ICON);
 }
 
 async function showPage() {
@@ -429,7 +465,10 @@ async function showPage() {
     searchMode = false;
     showFind();
     showPageName();
-    if (!knownPages.has(number)) window.document.title = BLANK_TITLE;
+    if (!knownPages.has(number)) {
+        window.document.title = BLANK_TITLE;
+        showIcon(BLANK_ICON);
+    }
 
     // What is on the page stays there until the new page differs from it, so
     // that flipping between similar pages does not flicker.
