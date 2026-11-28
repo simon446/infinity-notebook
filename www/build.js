@@ -20,6 +20,9 @@ async function build() {
     copy(file, file);
   }
 
+  // The hand that code is written in.
+  for (const font of ["ComicMono.ttf", "ComicMono-Bold.ttf"]) copy(path.join("node_modules", "comic-mono", font), path.join("fonts", font));
+
   // The wasm package stays files of its own (it finds its .wasm next to
   // itself), in a folder named after their contents.
   const packageFiles = ["infinity_notebook.js", "infinity_notebook_bg.wasm"];

@@ -63,5 +63,6 @@ Actions runs this build and commits the result to `docs/`, which GitHub Pages se
 ## Credits
 
 - <a href="https://codepen.io/MarcMalignan/pen/QbaXGg">Paper Styling by Marc Malignan</a>
+- [Comic Mono](https://dtinth.github.io/comic-mono-font/) by Shannon Miwa and dtinth (MIT), the hand that code is written in
 - https://github.com/3b1b/videos
 - [SmolLM2-135M](https://huggingface.co/HuggingFaceTB/SmolLM2-135M) by Hugging Face (Apache-2.0)

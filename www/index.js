@@ -1040,8 +1040,8 @@ setWritingOnRules();
 if (document.fonts) {
     document.fonts.ready.then(setWritingOnRules);
     document.fonts.addEventListener('loadingdone', setWritingOnRules);
-    const sizes = ['400 19px', '700 19px', '700 34px'];
-    Promise.all(sizes.map((size) => document.fonts.load(`${size} Handlee`))).then(setWritingOnRules, () => {});
+    const fonts = ['400 19px Handlee', '700 19px Handlee', '700 34px Handlee', "16px 'Comic Mono'"];
+    Promise.all(fonts.map((font) => document.fonts.load(font))).then(setWritingOnRules, () => {});
 }
 window.addEventListener('resize', setWritingOnRules);
 // What is printed is the page as it reads, also in the middle of editing.

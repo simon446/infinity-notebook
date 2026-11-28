@@ -33,6 +33,9 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Handlee&display=swap">
 
     <style>
+        @font-face { font-family: 'Comic Mono'; font-weight: normal; font-display: swap; src: url(./fonts/ComicMono.ttf) format('truetype'); }
+        @font-face { font-family: 'Comic Mono'; font-weight: bold; font-display: swap; src: url(./fonts/ComicMono-Bold.ttf) format('truetype'); }
+
         :root {
             --line: 30px;           /* height of one ruled line */
             --text: 19px;           /* size of the handwriting */
@@ -50,6 +53,8 @@
             --code-brown: #8a5a1c;
             --shadow: rgba(20, 30, 45, .14);
             --ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            /* code: a monospaced hand, so that it still lines up */
+            --mono: 'Comic Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
             color-scheme: light dark;
         }
         @media (prefers-color-scheme: dark) {
@@ -316,7 +321,7 @@
         /* The marks of the syntax stay where they are, a little fainter. */
         .source .syntax { color: var(--faded-ink); font-weight: normal; }
         .source .quote { color: var(--faded-ink); }
-        .source .code { font: 15px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+        .source .code { font: 16px var(--mono); }
 
         .reading ol { padding-left: 1.3em; }
         /* A bullet is a dash written in front of the item, in the same hand. */
@@ -333,13 +338,13 @@
         }
         .reading blockquote > * + * { margin-top: var(--line); }
         .content code {
-            font: 15px/1 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+            font: 16px/1 var(--mono);
             padding: 2px 0;
             background: color-mix(in srgb, var(--rule) 45%, transparent);
             border-radius: 4px;
         }
         .reading pre {
-            font-size: 15px;
+            font-size: 16px;
             padding: 0 10px;
             border-radius: 6px;
             background: color-mix(in srgb, var(--rule) 45%, transparent);
@@ -614,6 +619,6 @@
             <ul id="visited-list"></ul>
         </section>
     </dialog>
-    <script type="module" src="./index-PDRTWOCO.js"></script>
+    <script type="module" src="./index-WIY44WEJ.js"></script>
 </body>
 </html>
