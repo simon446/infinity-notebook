@@ -78,8 +78,7 @@
             min-height: 100dvh;
         }
 
-        /* The pencil: all there is besides the page, until it is pressed.
-           Beside it, how many drafts there are, if any. */
+        /* The pencil: all there is besides the page, until it is pressed. */
         .corner {
             position: fixed;
             top: max(12px, env(safe-area-inset-top));
@@ -102,9 +101,6 @@
             border-radius: 50%;
             background: var(--accent);
         }
-        .kept { opacity: .45; }
-        .kept:focus-visible { opacity: 1; }
-
         .icon {
             flex: none;
             display: grid;
@@ -145,7 +141,6 @@
         @media (hover: hover) {
             .edit:hover { opacity: 1; }
             .icon:hover:not(:disabled), .tools button:hover, .draft-open:hover:not(:disabled) { background: var(--rule); color: var(--ink); }
-            .kept:hover { opacity: 1; }
             .find:hover, .note-action:hover { filter: brightness(1.15); }
             .draft-discard:hover:not(:disabled) { color: var(--accent); }
         }
@@ -508,10 +503,6 @@
 <body>
     <main class="notebook">
         <div class="corner">
-            <button id="drafts-chip" class="icon counted kept" type="button" hidden>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13.5 6.5 5h11L20 13.5V18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 13.5h4.5l1 2h5l1-2H20"/></svg>
-                <span></span>
-            </button>
             <button id="edit" class="icon edit" type="button" aria-label="Edit this page" title="Edit this page">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3"/><path d="m14.5 7.5 3 3"/></svg>
             </button>
@@ -581,6 +572,6 @@
             <ul id="visited-list"></ul>
         </section>
     </dialog>
-    <script type="module" src="./index-R75DPQDZ.js"></script>
+    <script type="module" src="./index-SV462ZDF.js"></script>
 </body>
 </html>

@@ -22,7 +22,6 @@ const editButton = document.getElementById('edit');
 const findButton = document.getElementById('find');
 const viewButton = document.getElementById('view');
 const draftsButton = document.getElementById('drafts-button');
-const draftsChip = document.getElementById('drafts-chip');
 const draftsDialog = document.getElementById('drafts');
 const draftList = document.getElementById('draft-list');
 const visitedList = document.getElementById('visited-list');
@@ -684,7 +683,7 @@ function showKept() {
         drafts === 1 ? "1 draft" : drafts > 1 ? `${drafts} drafts` : "",
         pages > 0 ? "pages you have visited" : "",
     ].filter(Boolean).join(" and ");
-    for (const button of [draftsButton, draftsChip]) {
+    for (const button of [draftsButton]) {
         button.hidden = drafts + pages === 0;
         const count = button.querySelector('span');
         count.hidden = drafts === 0;
@@ -846,7 +845,6 @@ function discardDraft(draft) {
 }
 
 draftsButton.addEventListener('click', showDrafts);
-draftsChip.addEventListener('click', showDrafts);
 document.getElementById('drafts-close').addEventListener('click', () => draftsDialog.close());
 draftsDialog.addEventListener('click', (e) => { if (e.target === draftsDialog) draftsDialog.close(); });
 
