@@ -208,6 +208,8 @@
         /* A narrow screen: closer together, so the page number keeps some room. */
         @media (max-width: 480px) {
             .page-row .icon { width: 34px; }
+            /* With "Find page" in the row, the arrows make way for the page number. */
+            .unsaved #previous, .unsaved #next { display: none; }
             .find { margin: 0 2px; padding: 0 12px; font-size: 13px; }
             .pagenum { padding: 0 2px; font-size: 14px; }
         }
@@ -364,6 +366,8 @@
         .note[hidden] { display: none; }
         @keyframes rise { from { transform: translate(-50%, 10px); opacity: 0; } }
         .note-text { margin: 0; }
+        .note-image { display: block; width: min(220px, 100%); margin: 2px auto 12px; border-radius: 8px; }
+        .note-image[hidden] { display: none; }
         .note-action {
             display: block;
             width: 100%;
@@ -524,6 +528,9 @@
                 <button id="link" class="icon" type="button" aria-label="Copy a short link to this page" title="Copy a short link to this page">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13.5a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10.5a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/></svg>
                 </button>
+                <button id="qr" class="icon" type="button" aria-label="Copy a QR code for this page" title="Copy a QR code for this page">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2.5v2.5H14zM20 14v.01M17.5 17.5H20V20M14 20h.01"/></svg>
+                </button>
                 <button id="drafts-button" class="icon counted" type="button" hidden>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13.5 6.5 5h11L20 13.5V18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 13.5h4.5l1 2h5l1-2H20"/></svg>
                     <span></span>
@@ -547,6 +554,7 @@
             <div id="content" class="content" role="textbox" aria-multiline="true" aria-label="Page text" spellcheck="false"></div>
         </div>
         <aside id="note" class="note" role="status" aria-live="polite" hidden>
+            <img id="note-image" class="note-image" alt="QR code for this page" hidden>
             <p id="note-text" class="note-text"></p>
             <div id="note-progress" class="progress" hidden><div class="progress-fill"></div></div>
             <button id="note-action" class="note-action" type="button" hidden></button>
@@ -569,6 +577,6 @@
             <ul id="visited-list"></ul>
         </section>
     </dialog>
-    <script type="module" src="./index-5EHTCB4T.js"></script>
+    <script type="module" src="./index-6LDF3ZN6.js"></script>
 </body>
 </html>

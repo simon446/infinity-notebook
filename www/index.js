@@ -1,5 +1,6 @@
 import initWasm, * as wasm from "./pkg/infinity_notebook.js";
 import { canonical, createEditor } from "./editor.mjs";
+import { qrPng, qrSvg } from "./qr.mjs";
 
 await initWasm();
 wasm.init();
@@ -9,6 +10,8 @@ const previousButton = document.getElementById('previous');
 const nextButton = document.getElementById('next');
 const randomButton = document.getElementById('random');
 const linkButton = document.getElementById('link');
+const qrButton = document.getElementById('qr');
+const noteImage = document.getElementById('note-image');
 const sheet = document.getElementById('sheet');
 const tools = document.getElementById('tools');
 const note = document.getElementById('note');
@@ -86,9 +89,11 @@ function message(name) {
  * @param action a button: { label, run }
  */
 let noteTimer;
-function showNote(text, { progress, action, seconds } = {}) {
+function showNote(text, { progress, action, seconds, image } = {}) {
     clearTimeout(noteTimer);
     noteText.textContent = text;
+    noteImage.hidden = !image;
+    if (image) noteImage.src = image;
     noteProgress.hidden = progress === undefined;
     noteProgress.classList.toggle('scribble', progress === "scribble");
     if (typeof progress === "number") noteProgress.style.setProperty('--progress', `${Math.round(100 * progress)}%`);
@@ -984,6 +989,49 @@ linkButton.addEventListener('click', async function () {
         if (busy) return;
         hideNote();
     }, copied ? 3500 : 12000);
+});
+
+// The QR code of the page's short link, copied as a picture. It is also shown,
+// so that it can be scanned straight off the screen.
+qrButton.addEventListener('click', async function () {
+    if (busy) return;
+    const link = shortLink(pageNumber);
+    let svg, png;
+    try {
+        svg = qrSvg(link);
+        png = qrPng(link);
+    } catch {
+        showNote("This page's link is too long for a QR code.", { seconds: 5 });
+        return;
+    }
+    // A PNG pastes anywhere; the SVG goes along where the browser can carry it.
+    let copied = true;
+    try {
+        const pictures = { 'image/png': png };
+        if (ClipboardItem.supports?.('image/svg+xml')) pictures['image/svg+xml'] = new Blob([svg], { type: 'image/svg+xml' });
+        await navigator.clipboard.write([new ClipboardItem(pictures)]);
+    } catch {
+        copied = false;
+    }
+    const image = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+    if (copied) {
+        showNote("Copied a QR code for this page.", { image, seconds: 8 });
+        return;
+    }
+    showNote("Here is a QR code for this page. I could not copy it, but you can save it.", {
+        image,
+        action: {
+            label: "Save the QR code",
+            run: async () => {
+                const save = document.createElement('a');
+                save.href = URL.createObjectURL(await png);
+                save.download = "infinity-notebook-page.png";
+                save.click();
+                URL.revokeObjectURL(save.href);
+                hideNote();
+            },
+        },
+    });
 });
 
 // The handwriting font arrives after the page; measure again once it has.
