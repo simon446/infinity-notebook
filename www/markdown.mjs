@@ -29,10 +29,16 @@ rules.link_open = (tokens, index, options, _env, self) => {
 
 // A ```mermaid block is a diagram. It is rendered as its source, which
 // extras.mjs then replaces with the drawing.
-const renderFence = rules.fence;
-rules.fence = (tokens, index, options, env, self) => {
+// Code is rendered a line at a time, so that a line too long for the page
+// can show where it has been broken.
+const rows = (code) => code.replace(/\n$/, "").split("\n").map((line) => `<span class="row">${escapeHtml(line)}\n</span>`).join("");
+rules.code_block = (tokens, index) => `<pre><code>${rows(tokens[index].content)}</code></pre>\n`;
+rules.fence = (tokens, index, _options, env) => {
   const token = tokens[index];
-  if (token.info.trim().toLowerCase() !== "mermaid") return renderFence(tokens, index, options, env, self);
+  if (token.info.trim().toLowerCase() !== "mermaid") {
+    const language = token.info.trim().split(/\s+/)[0];
+    return `<pre><code${language ? ` class="language-${escapeHtml(language)}"` : ""}>${rows(token.content)}</code></pre>\n`;
+  }
   const source = escapeHtml(token.content);
   // On a page that is still being read out, the last diagram may not be all
   // there yet: it is whole once its closing fence has come.

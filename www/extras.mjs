@@ -61,11 +61,38 @@ function colourCode(root) {
     return;
   }
   for (const code of blocks) {
-    const language = /language-([\w+#-]+)/.exec(code.className)?.[1];
+    const language = /language-([\w+#-]+)/.exec(code.className)?.[1].toLowerCase();
     code.dataset.coloured = "yes";
-    if (!language || !highlighter.getLanguage(language)) continue;
-    // highlight.js returns the code escaped, with only its own spans in it.
-    code.innerHTML = highlighter.highlight(code.textContent, { language, ignoreIllegals: true }).value;
+    // The code is in rows, one for each of its lines, and stays so.
+    const lines = [...code.querySelectorAll(".row")];
+    const texts = lines.map((line) => line.textContent.replace(/\n$/, ""));
+    const stretches = coloursOf(texts.join("\n"), language);
+    if (stretches.length === 0) continue;
+    let start = 0;
+    let next = 0;
+    lines.forEach((line, index) => {
+      const text = texts[index];
+      const end = start + text.length;
+      const pieces = [];
+      let at = start;
+      while (next < stretches.length && stretches[next].from < end) {
+        const { from, to, name } = stretches[next];
+        const [first, last] = [Math.max(from, start), Math.min(to, end)];
+        if (first < last) {
+          if (first > at) pieces.push(text.slice(at - start, first - start));
+          const piece = document.createElement("span");
+          piece.className = name;
+          piece.textContent = text.slice(first - start, last - start);
+          pieces.push(piece);
+          at = last;
+        }
+        if (to > end) break; // the rest of it is on the next line
+        next++;
+      }
+      pieces.push(`${text.slice(at - start)}\n`);
+      line.replaceChildren(...pieces);
+      start = end + 1;
+    });
   }
 }
 
@@ -121,16 +148,37 @@ function typesetMath(root) {
  * to the next line so that what follows them is on the rules again.
  */
 export function snap(root) {
+  fitTables(root);
   for (const block of root.children) {
     // (a diagram sets its own height, and code is whole lines by its styling)
     if (block.classList.contains("diagram") || block.tagName === "PRE") continue;
     block.style.paddingTop = block.style.paddingBottom = "";
     const over = block.getBoundingClientRect().height % LINE;
     if (over < 0.5 || LINE - over < 0.5) continue;
-    // A formula on lines of its own sits in the middle of them.
-    const centred = block.matches(".math.display");
-    block.style.paddingBottom = `${(LINE - over) / (centred ? 2 : 1)}px`;
+    // A formula on lines of its own sits in the middle of them, and so
+    // does a table that has been made smaller, with some room around it.
+    const small = block.matches(".table.small");
+    const centred = small || block.matches(".math.display");
+    const room = LINE - over + (small && LINE - over < 12 ? LINE : 0);
+    block.style.paddingBottom = `${room / (centred ? 2 : 1)}px`;
     if (centred) block.style.paddingTop = block.style.paddingBottom;
+  }
+}
+
+/**
+ * A table too wide for the window is made smaller, writing and all, until
+ * it fits. Its rows are then no longer the lines of the page, so it gets a
+ * ground of its own (the "small" class).
+ */
+function fitTables(root) {
+  for (const holder of root.querySelectorAll(".table")) {
+    const table = holder.firstElementChild;
+    holder.classList.remove("small");
+    table.style.zoom = "";
+    if (table.offsetWidth <= holder.clientWidth + 0.5) continue;
+    holder.classList.add("small");
+    const scale = holder.clientWidth / table.offsetWidth;
+    if (scale < 1) table.style.zoom = scale;
   }
 }
 
@@ -243,8 +291,8 @@ function draw(source) {
 
 /**
  * Puts a drawing in its place. It keeps its own size, where the writing in it
- * is as large as the writing on the page; one wider than the window scrolls
- * sideways. It takes up whole lines. Its title
+ * is as large as the writing on the page, unless that is wider than the
+ * window: then all of it shrinks to fit. It takes up whole lines. Its title
  * is taken out of the drawing and written on the page, on the rules, with
  * room between it and the drawing.
  */
@@ -252,6 +300,34 @@ function place(figure, svg) {
   figure.innerHTML = svg;
   const picture = figure.querySelector("svg");
   if (!picture) return;
+  // What is written in a drawing is not on the rules of the page, so where
+  // it would stand on bare paper it gets a ground of its own: the key of a
+  // pie chart, and the pie itself, which is see-through.
+  const NS = "http://www.w3.org/2000/svg";
+  for (const slice of picture.querySelectorAll(".pieCircle")) {
+    const ground = slice.cloneNode(false);
+    ground.setAttribute("class", "ground");
+    ground.removeAttribute("style");
+    slice.before(ground);
+  }
+  const key = [...picture.querySelectorAll("g.legend")];
+  if (key.length > 0) {
+    let [left, top, right, bottom] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const entry of key) {
+      const box = entry.getBoundingClientRect();
+      [left, top, right, bottom] = [Math.min(left, box.left), Math.min(top, box.top), Math.max(right, box.right), Math.max(bottom, box.bottom)];
+    }
+    const [first, origin] = [key[0], key[0].parentNode.getScreenCTM()];
+    const patch = document.createElementNS(NS, "rect");
+    const pad = 8;
+    patch.setAttribute("class", "ground");
+    patch.setAttribute("x", (left - origin.e) / origin.a - pad);
+    patch.setAttribute("y", (top - origin.f) / origin.d - pad);
+    patch.setAttribute("width", (right - left) / origin.a + 2 * pad);
+    patch.setAttribute("height", (bottom - top) / origin.d + 2 * pad);
+    patch.setAttribute("rx", 8);
+    first.before(patch);
+  }
   picture.removeAttribute("style");
   figure.classList.add("drawn");
   const box = picture.viewBox.baseVal;

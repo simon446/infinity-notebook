@@ -39,6 +39,8 @@
 
         :root {
             --line: 30px;           /* height of one ruled line */
+            /* what is not on the rules stands on: the paper, a shade darker */
+            --ground: color-mix(in srgb, var(--rule) 38%, var(--paper));
             --text: 19px;           /* size of the handwriting */
             --measure: 46rem;       /* width of the column of writing */
             --paper: #fdfcf9;
@@ -354,11 +356,8 @@
                square: a character of this font is 0.545em wide, and is
                spaced out to a third of a line. */
             letter-spacing: calc(var(--line) / 3 - 0.544921875em);
-            /* A line of code is not broken: what is too wide for the window
-               scrolls sideways, as tables and diagrams do. */
-            white-space: pre;
-            overflow-x: auto;
-            scrollbar-width: none;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
             /* The squares: the rules of the page, and these lines down it,
                from the rule above the code to the rule below it. The block
                is that much taller than its lines (and a little more below,
@@ -370,7 +369,26 @@
             margin-bottom: calc(-1 * (var(--rise) + var(--tail)));
             background: linear-gradient(to right, var(--rule) 1px, transparent 1px) local 0 0 / var(--line) calc(100% - var(--rise) - var(--tail)) repeat-x;
         }
-        .reading pre::-webkit-scrollbar, .reading .diagram::-webkit-scrollbar { display: none; }
+        /* A line of code too long for the page goes on below, a square in,
+           behind an arrow that says so. The same while editing. */
+        .reading pre .row, .source .code {
+            display: block;
+            position: relative;
+            padding-left: var(--line);
+            text-indent: calc(-1 * var(--line));
+        }
+        .reading pre .row::before, .source .code::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: var(--line);
+            bottom: 0;
+            width: var(--line);
+            background: var(--faded-ink);
+            --turn: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 9.5C7.8 13 8 16 8.6 18.6 13 19.2 17.5 18.8 22 19M18 15.2 22.2 19 18.2 22.8'/%3E%3C/svg%3E");
+            -webkit-mask: var(--turn) 0 0 / var(--line) var(--line) repeat-y;
+            mask: var(--turn) 0 0 / var(--line) var(--line) repeat-y;
+        }
         /* It runs on past the column of writing, to the edge of the window,
            over whole squares. */
         .reading > pre {
@@ -404,7 +422,14 @@
            are its rules. Only the heading gets a line of its own. */
         /* A wide table runs on past the column of writing, to the edge of
            the window, and scrolls sideways if it is wider still. */
-        .reading .table { overflow-x: auto; margin-right: calc(50% - 50vw + 12px); }
+        .reading .table { overflow: hidden; margin-right: calc(50% - 50vw + 12px); }
+        /* One wider than even that is made smaller until it fits (extras.mjs).
+           Its rows are then not the lines of the page any more, so it gets
+           a ground of its own, and lines of its own. */
+        .reading .table.small table { border-collapse: separate; border-spacing: 0; background: var(--ground); border-radius: 8px; }
+        .reading .table.small :is(th, td) { padding: 0 10px; }
+        .reading .table.small tr + tr td { border-top: 1px solid var(--rule); }
+        .reading .diagram .ground { fill: var(--ground); stroke: none; }
         .reading table { border-collapse: collapse; }
         .reading th, .reading td { padding: 0 20px 0 0; text-align: left; vertical-align: top; }
         .reading th, .reading td:not(:last-child) { white-space: nowrap; }
@@ -449,23 +474,20 @@
         .hljs-strong { font-weight: bold; }
 
         /* A diagram runs from edge to edge of the window if it needs to, past
-           the column of writing, and scrolls sideways when even that is too
+           the column of writing, and shrinks only when even that is too
            narrow. It takes up whole lines (extras.mjs sets its height). */
         .reading .diagram {
             display: flex;
             flex-direction: column;
-            align-items: flex-start;
-            overflow-x: auto;
-            overflow-y: hidden;
-            scrollbar-width: none;
+            align-items: center;
             margin-left: calc(50% - 50vw + 12px);
             margin-right: calc(50% - 50vw + 12px);
             margin-bottom: 0;
         }
         .reading .diagram:not(.drawn) { display: block; margin-left: 0; margin-right: 0; }
-        .reading .diagram svg { display: block; flex: none; margin: auto; height: auto; overflow: visible; }
+        .reading .diagram svg { display: block; flex: none; margin: auto; max-width: 100%; height: auto; overflow: visible; }
         /* its title is writing like any other, on the rules */
-        .reading .diagram figcaption { flex: none; position: sticky; left: 0; width: 100%; text-align: center; }
+        .reading .diagram figcaption { flex: none; max-width: 100%; text-align: center; }
         .reading .diagram svg text, .reading .diagram svg tspan { font-family: 'Handlee', 'Comic Sans MS', cursive; }
         /* a label on a line hides the line behind it */
         .reading .diagram .edgeLabel rect.background, .reading .diagram .labelBkg { fill: var(--paper) !important; stroke: none !important; opacity: 1 !important; }
@@ -626,12 +648,10 @@
             .editing .reading { display: block; }
             .content code { background: none; }
             .content a { color: inherit; }
-            /* paper does not scroll: code is broken and drawings shrink */
-            .reading pre { white-space: pre-wrap; overflow: visible; }
             .reading > pre { width: auto; }
             /* A drawing stays in one piece, on one sheet, and is as tall as
                it is drawn: split over two sheets it would be printed over. */
-            .reading .diagram { display: block; overflow: visible; height: auto !important; break-inside: avoid; }
+            .reading .diagram { display: block; height: auto !important; break-inside: avoid; }
             .reading .diagram svg { margin: 0 auto; max-width: 100%; max-height: 225mm; }
         }
         @media print and (max-width: 160mm) { .notebook { zoom: .88; } }  /* A5: 7 mm */
@@ -716,6 +736,6 @@
             <ul id="visited-list"></ul>
         </section>
     </dialog>
-    <script type="module" src="./index-YIUA5GIS.js"></script>
+    <script type="module" src="./index-S3ML2KPM.js"></script>
 </body>
 </html>
