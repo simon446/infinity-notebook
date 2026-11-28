@@ -377,6 +377,21 @@
             padding-left: var(--line);
             text-indent: calc(-1 * var(--line));
         }
+        /* ...and where it was broken, an arrow after its last character:
+           past the space, if it was broken at one (extras.mjs puts it there). */
+        .reading pre .turn { position: relative; display: inline-block; width: 0; height: 0; text-indent: 0; user-select: none; -webkit-user-select: none; }
+        .reading pre .turn::after {
+            content: '';
+            position: absolute;
+            left: calc(var(--spaces, 0) * var(--line) / 3 + 2px);
+            bottom: -7px;
+            width: 14px;
+            height: 22px;
+            background: var(--faded-ink);
+            --hook: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 22' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.5 5C10.8 8 10.6 11 10.4 13.6 8 14 5.6 13.8 3.2 14M6.4 10.6 3 14 6.6 17.2'/%3E%3C/svg%3E");
+            -webkit-mask: var(--hook) center / contain no-repeat;
+            mask: var(--hook) center / contain no-repeat;
+        }
         .reading pre .row::before, .source .code::before {
             content: '';
             position: absolute;
@@ -427,7 +442,8 @@
            Its rows are then not the lines of the page any more, so it gets
            a ground of its own, and lines of its own. */
         .reading .table.small table { border-collapse: separate; border-spacing: 0; background: var(--ground); border-radius: 8px; }
-        .reading .table.small :is(th, td) { padding: 0 10px; }
+        .reading .table.small { margin-left: calc(50% - 50vw + 12px); }
+        .reading .table.small :is(th, td) { padding: 0 8px; }
         .reading .table.small tr + tr td { border-top: 1px solid var(--rule); }
         .reading .diagram .ground { fill: var(--ground); stroke: none; }
         .reading table { border-collapse: collapse; }
@@ -736,6 +752,6 @@
             <ul id="visited-list"></ul>
         </section>
     </dialog>
-    <script type="module" src="./index-TJ3LQPF5.js"></script>
+    <script type="module" src="./index-ZQLSGX6E.js"></script>
 </body>
 </html>

@@ -94,6 +94,45 @@ function colourCode(root) {
       start = end + 1;
     });
   }
+  markTurns(root);
+}
+
+/**
+ * Marks where a line of code too long for the page has been broken: a small
+ * arrow after the last character before the break. A space that the line
+ * was broken at keeps its place, between that character and the arrow, so
+ * that it shows whether there is one.
+ */
+function markTurns(root) {
+  const range = document.createRange();
+  for (const row of root.querySelectorAll("pre .row")) {
+    for (const mark of row.querySelectorAll(".turn")) mark.remove();
+    row.normalize();
+    if (row.getBoundingClientRect().height < 1.5 * LINE) continue;
+    const breaks = [];
+    const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+    let top;
+    let before; // the last character that is not a space, and the spaces after it
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      for (let at = 0; at < node.data.length; at++) {
+        if (node.data[at] === "\n") continue;
+        range.setStart(node, at);
+        range.setEnd(node, at + 1);
+        const here = range.getBoundingClientRect().top;
+        if (top !== undefined && here - top > LINE / 2 && before) breaks.push(before);
+        top = Math.max(top ?? here, here);
+        if (node.data[at] === " " && before) before = { ...before, spaces: before.spaces + 1 };
+        else before = { node, at: at + 1, spaces: 0 };
+      }
+    }
+    // from the end, so that the places found stay where they are
+    for (const { node, at, spaces } of breaks.reverse()) {
+      const mark = document.createElement("span");
+      mark.className = "turn";
+      mark.style.setProperty("--spaces", spaces);
+      node.splitText(at).before(mark);
+    }
+  }
 }
 
 // ----------------------------------------------------------------- math
@@ -149,6 +188,7 @@ function typesetMath(root) {
  */
 export function snap(root) {
   fitTables(root);
+  markTurns(root);
   for (const block of root.children) {
     // (a diagram sets its own height, and code is whole lines by its styling)
     if (block.classList.contains("diagram") || block.tagName === "PRE") continue;
