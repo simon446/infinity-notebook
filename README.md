@@ -32,8 +32,10 @@ python3 tools/convert_weights.py model.safetensors www/model
 A page's text is Markdown, and it is the Markdown that gets a page number.
 
 A page opens for reading: just the ruled page with its Markdown rendered (by
-[markdown-it](https://github.com/markdown-it/markdown-it), without HTML or images, and with
-line breaks kept as line breaks). Links are those written as `[text](address)` and any
+[markdown-it](https://github.com/markdown-it/markdown-it), set up in `www/markdown.mjs`):
+CommonMark with tables, strikethrough, task lists, footnotes, callouts, a collapsible
+section and math ([KaTeX](https://katex.org)), without other HTML or images, and with line
+breaks kept as line breaks. Links are those written as `[text](address)` and any
 address written out with its scheme. A ```` ```mermaid ```` block is drawn as a diagram
 ([mermaid](https://mermaid.js.org), in its hand-drawn look and the page's handwriting), and
 code blocks that name their language are coloured

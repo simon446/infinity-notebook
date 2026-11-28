@@ -352,6 +352,64 @@
         }
         .reading pre code { background: none; padding: 0; line-height: inherit; }
 
+        .content s, .content del { text-decoration: line-through; text-decoration-thickness: 1.5px; }
+
+        /* A task: a box drawn by hand in front of it, ticked when it is done. */
+        .reading ul > li.task { padding-left: 27px; }
+        .reading ul > li.task::before {
+            content: '';
+            left: 0;
+            /* the bottom of the box stands on the rule, like the writing */
+            top: calc(var(--line) - 1px - var(--shift-text, 9px) - 19px);
+            width: 21px;
+            height: 21px;
+            background: var(--ink);
+            -webkit-mask: var(--box) center / contain no-repeat;
+            mask: var(--box) center / contain no-repeat;
+            --box: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 21 21' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.7 6.3C6.4 5.6 11.3 6.2 15.6 5.8 16 9.9 15.4 14.6 15.8 18.7 11.5 19.3 6.3 18.5 2.9 19 2.3 14.8 3.2 10.2 2.7 6.3Z'/%3E%3C/svg%3E");
+        }
+        .reading ul > li.task.done::before {
+            --box: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 21 21' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.7 6.3C6.4 5.6 11.3 6.2 15.6 5.8 16 9.9 15.4 14.6 15.8 18.7 11.5 19.3 6.3 18.5 2.9 19 2.3 14.8 3.2 10.2 2.7 6.3Z'/%3E%3Cpath stroke-width='2.2' d='M5.6 11.6C7 13 8.2 14.6 9.2 16.2 11.6 11 14.8 6.4 19.4 2'/%3E%3C/svg%3E");
+        }
+        .reading ul > li.task.done { color: var(--faded-ink); }
+
+        /* A table: its rows are lines of the page, so the rules of the page
+           are its rules. Only the heading gets a line of its own. */
+        /* A wide table runs on past the column of writing, to the edge of
+           the window, and scrolls sideways if it is wider still. */
+        .reading .table { overflow-x: auto; margin-right: calc(50% - 50vw + 12px); }
+        .reading table { border-collapse: collapse; }
+        .reading th, .reading td { padding: 0 20px 0 0; text-align: left; vertical-align: top; }
+        .reading th, .reading td:not(:last-child) { white-space: nowrap; }
+        /* the last column takes the long text: it wraps, but is never squeezed thin */
+        .reading td:last-child { min-width: min(15em, 62vw); }
+        .reading th { font-weight: bold; }
+        .reading thead tr { box-shadow: inset 0 -2px var(--ink); }
+
+        /* A callout: a quote that says what it is. */
+        .reading blockquote.callout { color: inherit; border-left-color: var(--callout, var(--accent)); }
+        .reading .callout-title { color: var(--callout, var(--accent)); font-weight: bold; }
+        .reading blockquote > .callout-title + * { margin-top: 0; }
+        .reading .callout.note { --callout: var(--code-blue); }
+        .reading .callout.tip { --callout: var(--code-green); }
+        .reading .callout.warning { --callout: var(--code-brown); }
+
+        /* Footnotes: small numbers in the text, and the notes at the end. */
+        .reading sup { font-size: .7em; line-height: 0; }
+        .reading .footnotes-sep { background-position: left center; background-size: 30% 2px; }
+        .reading .footnotes-list { padding-left: 1.3em; }
+        .reading .footnote-backref { margin-left: .3em; }
+
+        /* A section that folds away. */
+        .reading summary { cursor: pointer; }
+        .reading details > :not(summary) ~ * { margin-top: var(--line); }
+
+        /* Math: typeset, at the size of the writing. A long formula scrolls. */
+        .reading .math .katex { font-size: 1.1em; }
+        .reading .math.display { overflow-x: auto; overflow-y: hidden; text-align: center; }
+        .reading .math.display .katex-display { margin: 0; }
+        .reading .math:not(.typeset) { font-family: var(--mono); font-size: 16px; }
+
         /* Code in colour: a few inks, quiet enough for a notebook. */
         .hljs-comment, .hljs-quote, .hljs-meta { color: var(--faded-ink); font-style: italic; }
         .hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-doctag, .hljs-tag, .hljs-name { color: var(--code-red); }
@@ -359,7 +417,7 @@
         .hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable, .hljs-link, .hljs-selector-attr, .hljs-selector-pseudo { color: var(--code-blue); }
         .hljs-title, .hljs-section, .hljs-type, .hljs-selector-id, .hljs-selector-class, .hljs-attr { color: var(--code-brown); }
         .hljs-title.function_, .hljs-title.class_ { font-weight: bold; }
-        .hljs-deletion { color: var(--code-red); text-decoration: line-through; }
+        .hljs-deletion { color: var(--code-red); }
         .hljs-emphasis { font-style: italic; }
         .hljs-strong { font-weight: bold; }
 

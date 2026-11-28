@@ -6,7 +6,6 @@
 // fainter) and nothing in it is ever hidden or rewritten. Reading a page shows
 // the same text rendered.
 
-import MarkdownIt from "markdown-it";
 import { baseKeymap, chainCommands } from "prosemirror-commands";
 import { history, redo, undo } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
@@ -15,42 +14,7 @@ import { EditorState, Plugin, TextSelection } from "prosemirror-state";
 import { Decoration, DecorationSet, EditorView } from "prosemirror-view";
 
 import { enhance } from "./extras.mjs";
-
-// ---------------------------------------------------------------- reading
-
-// Markdown as it is rendered for reading. No HTML and no images: a page is
-// text, and a random page should not make the browser fetch whatever address
-// it happens to name. A line break in the text is a line break on the page.
-// Links are those written as [text](address) and any address written out
-// with its scheme (https://...).
-const markdownIt = MarkdownIt("commonmark", { html: false, breaks: true, linkify: true }).enable("linkify").disable("image");
-const linkify = markdownIt.linkify.set({ fuzzyLink: false, fuzzyEmail: false });
-
-// Links open in a new tab, and tell the site nothing about this page.
-markdownIt.renderer.rules.link_open = (tokens, index, options, _env, self) => {
-  tokens[index].attrSet("target", "_blank");
-  tokens[index].attrSet("rel", "noopener noreferrer nofollow");
-  return self.renderToken(tokens, index, options);
-};
-
-// A ```mermaid block is a diagram. It is rendered as its source, which
-// extras.mjs then replaces with the drawing.
-const renderFence = markdownIt.renderer.rules.fence;
-markdownIt.renderer.rules.fence = (tokens, index, options, env, self) => {
-  const token = tokens[index];
-  if (token.info.trim().toLowerCase() !== "mermaid") return renderFence(tokens, index, options, env, self);
-  const source = markdownIt.utils.escapeHtml(token.content);
-  return `<figure class="diagram" data-source="${source}"><pre><code>${source}</code></pre></figure>\n`;
-};
-
-/** The page's first large heading, if it has one. */
-export function titleOf(markdown) {
-  const tokens = markdownIt.parse(markdown, {});
-  const heading = tokens.findIndex((token) => token.type === "heading_open" && token.tag === "h1");
-  if (heading < 0) return undefined;
-  const words = (tokens[heading + 1].children ?? []).filter((child) => child.type === "text" || child.type === "code_inline");
-  return words.map((child) => child.content).join("").trim() || undefined;
-}
+import { linkify, markdownIt, titleOf } from "./markdown.mjs";
 
 // ---------------------------------------------------------------- editing
 
@@ -123,6 +87,8 @@ function dress(doc) {
       syntax(0, match[1].length);
     } else if ((match = BULLET.exec(text))) {
       syntax(match[1].length, match[1].length + match[2].length);
+      // the box of a task
+      if (/^\[[ xX]\](\s|$)/.test(text.slice(match[0].length))) syntax(match[0].length, match[0].length + 3);
     } else if ((match = NUMBERED.exec(text))) {
       syntax(match[1].length, match[1].length + match[2].length + match[3].length);
     }

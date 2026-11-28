@@ -1,6 +1,7 @@
 // What a page being read gets on top of plain Markdown: diagrams drawn from
-// ```mermaid blocks, and colour in code blocks that name their language.
-// Both come from libraries that are only fetched by pages that use them.
+// ```mermaid blocks, typeset math, and colour in code blocks that name their
+// language. Each comes from a library that is only fetched by pages that use
+// it.
 
 const LINE = 30; // height of a ruled line, as in index.html
 
@@ -28,6 +29,79 @@ function colourCode(root) {
   }
 }
 
+// ----------------------------------------------------------------- math
+
+let katex;          // KaTeX, once a page has needed it
+let katexLoading;
+
+/** KaTeX's style sheet, which brings its fonts. */
+function loadMathStyles() {
+  return new Promise((resolve) => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = new URL("./katex/katex.min.css", document.baseURI).href;
+    link.onload = link.onerror = resolve;
+    document.head.append(link);
+  });
+}
+
+/** Typesets the math under `root`. Until then it shows as it was written. */
+function typesetMath(root) {
+  const pieces = [...root.querySelectorAll(".math:not(.typeset)")];
+  if (pieces.length === 0) return;
+  if (!katex) {
+    katexLoading ??= Promise.all([import("katex"), loadMathStyles()]).then(([module]) => { katex = module.default; });
+    katexLoading.then(() => {
+      typesetMath(root);
+      snap(root);
+      // its fonts arrive a little later still, and change heights
+      document.fonts?.ready.then(() => snap(root));
+    }, () => { /* the math stays as it was written */ });
+    return;
+  }
+  for (const piece of pieces) {
+    piece.classList.add("typeset");
+    try {
+      katex.render(piece.dataset.tex, piece, {
+        displayMode: piece.classList.contains("display"),
+        throwOnError: false,
+        errorColor: "#c8452f",
+      });
+    } catch {
+      // not math after all: leave the text
+    }
+  }
+}
+
+// -------------------------------------------------------------- the rules
+
+/**
+ * Keeps the writing on the rules. Most of a page is a whole number of lines
+ * tall by its styling; math, tables and the like may not be, and are padded
+ * to the next line so that what follows them is on the rules again.
+ */
+export function snap(root) {
+  for (const block of root.children) {
+    if (block.classList.contains("diagram")) continue;
+    block.style.paddingTop = block.style.paddingBottom = "";
+    const over = block.getBoundingClientRect().height % LINE;
+    if (over < 0.5 || LINE - over < 0.5) continue;
+    // A formula on lines of its own sits in the middle of them.
+    const centred = block.matches(".math.display");
+    block.style.paddingBottom = `${(LINE - over) / (centred ? 2 : 1)}px`;
+    if (centred) block.style.paddingTop = block.style.paddingBottom;
+  }
+}
+
+/** Links to another place on the page (footnotes) go there, not to another page. */
+function followWithinPage(event) {
+  const link = event.target.closest?.('a[href^="#"]');
+  if (!link) return;
+  event.preventDefault();
+  const target = document.getElementById(decodeURIComponent(link.getAttribute("href").slice(1)));
+  if (target && event.currentTarget.contains(target)) target.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
 // ------------------------------------------------------------- diagrams
 
 // Diagrams are drawn with these stand-in colours, which are then swapped for
@@ -39,8 +113,19 @@ const STAND_INS = {
   "#7b7c7d": "var(--faded-ink)",
   "#dbdcdd": "var(--rule)",
   "#c3c4c5": "var(--accent)",
+  "#a3a4a5": "var(--code-blue)",
+  "#b3b4b5": "var(--code-green)",
+  "#939495": "var(--code-brown)",
 };
-const [INK, PAPER, FADED, RULE, ACCENT] = Object.keys(STAND_INS);
+const [INK, PAPER, FADED, RULE, ACCENT, BLUE, GREEN, BROWN] = Object.keys(STAND_INS);
+// Some colours come back from the library written as rgb(r, g, b).
+const SWAPS = new Map();
+for (const [hex, colour] of Object.entries(STAND_INS)) {
+  const [r, g, b] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16));
+  SWAPS.set(hex, colour);
+  SWAPS.set(`rgb(${r},${g},${b})`, colour);
+}
+const STAND_IN = new RegExp(`${Object.keys(STAND_INS).join("|")}|rgb\\(\\s*\\d+\\s*,\\s*\\d+\\s*,\\s*\\d+\\s*\\)`, "gi");
 const FONT = "Handlee, 'Comic Sans MS', cursive";
 
 let mermaid;                    // the library, once a page has needed it
@@ -91,7 +176,9 @@ async function loadMermaid() {
       labelBoxBkgColor: PAPER, labelBoxBorderColor: INK, labelTextColor: INK, loopTextColor: INK,
       activationBkgColor: RULE, activationBorderColor: INK, sequenceNumberColor: PAPER,
       classText: INK, labelColor: INK, altBackground: RULE, errorBkgColor: RULE, errorTextColor: ACCENT,
-      pie1: RULE, pie2: FADED, pie3: ACCENT, pie4: PAPER, pieStrokeColor: INK, pieOuterStrokeColor: INK,
+      pie1: BLUE, pie2: GREEN, pie3: BROWN, pie4: ACCENT, pie5: FADED, pie6: RULE, pie7: PAPER,
+      pie8: BLUE, pie9: GREEN, pie10: BROWN, pie11: ACCENT, pie12: FADED,
+      pieStrokeColor: INK, pieOuterStrokeColor: INK, pieStrokeWidth: "1.5px", pieOpacity: "0.55",
       pieTitleTextColor: INK, pieSectionTextColor: INK, pieLegendTextColor: INK,
     },
   });
@@ -104,7 +191,7 @@ function draw(source) {
       try {
         await loadMermaid();
         const { svg } = await mermaid.render(`diagram-${++drawn}`, source);
-        return svg.replace(new RegExp(Object.keys(STAND_INS).join("|"), "gi"), (colour) => STAND_INS[colour.toLowerCase()]);
+        return svg.replace(STAND_IN, (colour) => SWAPS.get(colour.toLowerCase().replace(/\s/g, "")) ?? colour);
       } catch {
         return null;
       }
@@ -145,13 +232,25 @@ function drawDiagrams(root) {
   }
 }
 
-// A narrower window may shrink a drawing, which then needs fewer lines.
+const pages = new Set(); // the elements that pages have been rendered into
+
+// A narrower window may shrink a drawing, which then needs fewer lines, and
+// wraps the writing differently.
 window.addEventListener("resize", () => {
   for (const figure of document.querySelectorAll(".diagram.drawn")) figure.refit?.();
+  for (const root of pages) snap(root);
 });
 
 /** Dresses up a page that has just been rendered into `root`. */
 export function enhance(root) {
+  if (!pages.has(root)) {
+    pages.add(root);
+    root.addEventListener("click", followWithinPage);
+    // a folded section that opens or closes changes the height of its block
+    root.addEventListener("toggle", () => snap(root), true);
+  }
   colourCode(root);
+  typesetMath(root);
   drawDiagrams(root);
+  snap(root);
 }

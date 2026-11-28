@@ -23,6 +23,13 @@ async function build() {
   // The hand that code is written in.
   for (const font of ["ComicMono.ttf", "ComicMono-Bold.ttf"]) copy(path.join("node_modules", "comic-mono", font), path.join("fonts", font));
 
+  // What typeset math needs besides its script: a style sheet and its fonts
+  // (the compact format only; every current browser reads it).
+  copy(path.join("node_modules", "katex", "dist", "katex.min.css"), path.join("katex", "katex.min.css"));
+  for (const font of fs.readdirSync(path.join(__dirname, "node_modules", "katex", "dist", "fonts"))) {
+    if (font.endsWith(".woff2")) copy(path.join("node_modules", "katex", "dist", "fonts", font), path.join("katex", "fonts", font));
+  }
+
   // The wasm package stays files of its own (it finds its .wasm next to
   // itself), in a folder named after their contents.
   const packageFiles = ["infinity_notebook.js", "infinity_notebook_bg.wasm"];
