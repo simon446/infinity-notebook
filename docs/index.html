@@ -349,13 +349,28 @@
             /* the same hand as the code in it: the block's own font also
                decides where its lines stand, and differs between devices */
             font-family: var(--mono);
-            font-size: 16px;
-            padding: 0 10px;
-            border-radius: 6px;
-            background: color-mix(in srgb, var(--rule) 45%, transparent);
+            font-size: 17px;
+            /* Code is written on squared paper, three characters to a
+               square: a character of this font is 0.545em wide, and is
+               spaced out to a third of a line. */
+            letter-spacing: calc(var(--line) / 3 - 0.544921875em);
             white-space: pre-wrap;
         }
-        .reading pre code { background: none; padding: 0; line-height: inherit; }
+        /* The squares: the rules of the page, and these lines down it. They
+           run from the rule above the code to the rule below it, and across
+           as many whole squares as fit. */
+        .reading pre::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: calc(-1px - var(--shift-text, 9px) - var(--shift-pre, 0px));
+            width: 100%;
+            width: calc(round(down, 100%, var(--line)) + 1px);
+            height: 100%;
+            background: linear-gradient(to right, var(--rule) 1px, transparent 1px) 0 0 / var(--line) 100%;
+            pointer-events: none;
+        }
+        .reading pre code { background: none; padding: 0; font-size: inherit; line-height: inherit; }
 
         .content s, .content del { text-decoration: line-through; text-decoration-thickness: 1.5px; }
 
@@ -684,6 +699,6 @@
             <ul id="visited-list"></ul>
         </section>
     </dialog>
-    <script type="module" src="./index-AIBTRZAY.js"></script>
+    <script type="module" src="./index-NRLES26N.js"></script>
 </body>
 </html>
