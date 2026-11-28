@@ -14,6 +14,8 @@ import { Fragment, Schema, Slice } from "prosemirror-model";
 import { EditorState, Plugin, TextSelection } from "prosemirror-state";
 import { Decoration, DecorationSet, EditorView } from "prosemirror-view";
 
+import { enhance } from "./extras.mjs";
+
 // ---------------------------------------------------------------- reading
 
 // Markdown as it is rendered for reading. No HTML and no images: a page is
@@ -29,6 +31,16 @@ markdownIt.renderer.rules.link_open = (tokens, index, options, _env, self) => {
   tokens[index].attrSet("target", "_blank");
   tokens[index].attrSet("rel", "noopener noreferrer nofollow");
   return self.renderToken(tokens, index, options);
+};
+
+// A ```mermaid block is a diagram. It is rendered as its source, which
+// extras.mjs then replaces with the drawing.
+const renderFence = markdownIt.renderer.rules.fence;
+markdownIt.renderer.rules.fence = (tokens, index, options, env, self) => {
+  const token = tokens[index];
+  if (token.info.trim().toLowerCase() !== "mermaid") return renderFence(tokens, index, options, env, self);
+  const source = markdownIt.utils.escapeHtml(token.content);
+  return `<figure class="diagram" data-source="${source}"><pre><code>${source}</code></pre></figure>\n`;
 };
 
 /** The page's first large heading, if it has one. */
@@ -299,6 +311,7 @@ function linesSlice(text) {
 export function createEditor(source, reading, { onEdit, onSubmit, onState }) {
   let editable = true;
   let rendered;
+  let enhancing;
   const view = new EditorView(
     { mount: source },
     {
@@ -369,6 +382,10 @@ export function createEditor(source, reading, { onEdit, onSubmit, onState }) {
       if (markdown === rendered) return;
       rendered = markdown;
       reading.innerHTML = markdownIt.render(markdown);
+      // Diagrams and coloured code, once the text has stopped changing: a
+      // page that is still being read out changes many times a second.
+      clearTimeout(enhancing);
+      enhancing = setTimeout(() => enhance(reading), 120);
     },
 
     setEditable(value) {

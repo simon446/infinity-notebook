@@ -43,6 +43,11 @@
             --faded-ink: #8a929e;
             --rule: #e4e8ee;
             --accent: #c8452f;
+            /* inks for code */
+            --code-red: #b8412e;
+            --code-green: #4b7a3a;
+            --code-blue: #2f6690;
+            --code-brown: #8a5a1c;
             --shadow: rgba(20, 30, 45, .14);
             --ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
             color-scheme: light dark;
@@ -55,6 +60,10 @@
                 --faded-ink: #6f7a88;
                 --rule: #232a33;
                 --accent: #ff8f7d;
+                --code-red: #ff9c8c;
+                --code-green: #a5cf8f;
+                --code-blue: #8fc1e8;
+                --code-brown: #e0b77a;
                 --shadow: rgba(0, 0, 0, .5);
             }
         }
@@ -242,6 +251,7 @@
            so the writing stays on the rules. */
         .sheet {
             flex: 1;
+            overflow-x: clip;
             padding-top: calc(2 * var(--line));
             background: linear-gradient(to bottom, transparent calc(var(--line) - 1px), var(--rule) calc(var(--line) - 1px)) 0 0 / 100% var(--line);
         }
@@ -336,6 +346,34 @@
             white-space: pre-wrap;
         }
         .reading pre code { background: none; padding: 0; line-height: inherit; }
+
+        /* Code in colour: a few inks, quiet enough for a notebook. */
+        .hljs-comment, .hljs-quote, .hljs-meta { color: var(--faded-ink); font-style: italic; }
+        .hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-doctag, .hljs-tag, .hljs-name { color: var(--code-red); }
+        .hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute, .hljs-symbol, .hljs-bullet { color: var(--code-green); }
+        .hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable, .hljs-link, .hljs-selector-attr, .hljs-selector-pseudo { color: var(--code-blue); }
+        .hljs-title, .hljs-section, .hljs-type, .hljs-selector-id, .hljs-selector-class, .hljs-attr { color: var(--code-brown); }
+        .hljs-title.function_, .hljs-title.class_ { font-weight: bold; }
+        .hljs-deletion { color: var(--code-red); text-decoration: line-through; }
+        .hljs-emphasis { font-style: italic; }
+        .hljs-strong { font-weight: bold; }
+
+        /* A diagram runs from edge to edge of the window if it needs to, past
+           the column of writing, and shrinks only when even that is too
+           narrow. It takes up whole lines (extras.mjs sets its height). */
+        .reading .diagram {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: calc(50% - 50vw + 12px);
+            margin-right: calc(50% - 50vw + 12px);
+            margin-bottom: 0;
+        }
+        .reading .diagram:not(.drawn) { display: block; margin-left: 0; margin-right: 0; }
+        .reading .diagram svg { display: block; max-width: 100%; height: auto; overflow: visible; }
+        .reading .diagram svg text, .reading .diagram svg tspan { font-family: 'Handlee', 'Comic Sans MS', cursive; }
+        /* a label on a line hides the line behind it */
+        .reading .diagram .edgeLabel rect.background, .reading .diagram .labelBkg { fill: var(--paper) !important; stroke: none !important; opacity: 1 !important; }
         .reading hr {
             height: var(--line);
             border: 0;
@@ -343,7 +381,7 @@
         }
 
         /* What is going on, said in a card at the bottom of the window */
-        .note {
+        aside.note {
             position: fixed;
             left: 50%;
             bottom: max(18px, env(safe-area-inset-bottom));
@@ -359,7 +397,7 @@
             font: 15px/1.4 var(--ui);
             animation: rise .2s ease-out;
         }
-        .note[hidden] { display: none; }
+        aside.note[hidden] { display: none; }
         @keyframes rise { from { transform: translate(-50%, 10px); opacity: 0; } }
         .note-text { margin: 0; }
         .note-image { display: block; width: min(220px, 100%); margin: 2px auto 12px; border-radius: 8px; }
@@ -465,11 +503,15 @@
                 --faded-ink: #444;
                 --rule: #b9c3d2;
                 --accent: #000;
+                --code-red: #8f2314;
+                --code-green: #2f5a22;
+                --code-blue: #1c4a6e;
+                --code-brown: #6b430f;
                 --measure: none;
                 color-scheme: light;
             }
             body { background: none; }
-            .bar, .corner, .note, .drafts { display: none !important; }
+            .bar, .corner, aside.note, .drafts { display: none !important; }
             /* a full sheet of rules, however little is written on it */
             .notebook { min-height: calc(100vh - var(--line)); }
             .sheet, .editing .sheet {
@@ -494,7 +536,7 @@
         @media print and (max-width: 115mm) { .notebook { zoom: .76; } }  /* A6: 6 mm */
 
         @media (prefers-reduced-motion: reduce) {
-            .note, .icon.rolling svg, .progress.scribble .progress-fill { animation: none; }
+            aside.note, .icon.rolling svg, .progress.scribble .progress-fill { animation: none; }
             .progress-fill { transition: none; }
         }
     </style>

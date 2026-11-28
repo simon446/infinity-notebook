@@ -28,11 +28,15 @@ async function build() {
   const packageFolder = `pkg-${hash.digest("hex").slice(0, 10)}`;
   for (const file of packageFiles) copy(path.join("..", "pkg", file), path.join(packageFolder, file));
 
-  const bundle = async (entry, define = {}) => {
+  // The page's script is split: the libraries for diagrams and coloured
+  // code go in files of their own, fetched only by pages that need them.
+  const bundle = async (entry, define = {}, splitting = false) => {
     const result = await esbuild.build({
       entryPoints: [path.join(__dirname, entry)],
       outdir: dist,
       entryNames: "[name]-[hash]",
+      chunkNames: "chunks/[name]-[hash]",
+      splitting,
       bundle: true,
       format: "esm",
       target: "es2022",
@@ -50,13 +54,15 @@ async function build() {
         },
       }],
     });
-    return path.basename(Object.keys(result.metafile.outputs)[0]);
+    // Files loaded on demand count as entry points too; this is the one asked for.
+    const [file] = Object.entries(result.metafile.outputs).find(([, output]) => output.entryPoint && path.basename(output.entryPoint) === entry);
+    return path.basename(file);
   };
 
   // The worker that runs the language model, then the page's script, which
   // needs to know the worker's name.
   const worker = await bundle("worker.mjs");
-  const script = await bundle("index.js", { WORKER_FILE: JSON.stringify(`./${worker}`) });
+  const script = await bundle("index.js", { WORKER_FILE: JSON.stringify(`./${worker}`) }, true);
 
   const page = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
   if (!page.includes('src="./index.js"')) throw new Error("index.html does not load ./index.js");

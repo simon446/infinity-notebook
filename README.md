@@ -34,7 +34,11 @@ A page's text is Markdown, and it is the Markdown that gets a page number.
 A page opens for reading: just the ruled page with its Markdown rendered (by
 [markdown-it](https://github.com/markdown-it/markdown-it), without HTML or images, and with
 line breaks kept as line breaks). Links are those written as `[text](address)` and any
-address written out with its scheme.
+address written out with its scheme. A ```` ```mermaid ```` block is drawn as a diagram
+([mermaid](https://mermaid.js.org), in its hand-drawn look and the page's handwriting), and
+code blocks that name their language are coloured
+([highlight.js](https://highlightjs.org)). Both libraries are fetched only by pages that
+use them (`www/extras.mjs`).
 
 The pencil in the corner brings out the page number, page flipping and formatting, and
 turns the page into its source: the Markdown exactly as it is, edited as plain text in a
