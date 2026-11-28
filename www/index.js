@@ -229,7 +229,7 @@ function setWritingOnRules() {
 
     const measure = (tag, inner = "") => {
         const probe = document.createElement(tag);
-        probe.style.cssText = 'position:absolute;visibility:hidden;top:0;left:0;white-space:nowrap;margin:0';
+        probe.style.cssText = 'position:absolute;visibility:hidden;top:0;left:0;white-space:nowrap;margin:0;padding:0';
         probe.innerHTML = `${inner}Hnmhi<span style="display:inline-block;width:0;height:0"></span>`;
         twin.append(probe);
         const writing = probe.querySelector('strong, code') ?? probe;

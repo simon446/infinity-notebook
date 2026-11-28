@@ -629,8 +629,10 @@
             /* paper does not scroll: code is broken and drawings shrink */
             .reading pre { white-space: pre-wrap; overflow: visible; }
             .reading > pre { width: auto; }
-            .reading .diagram { overflow: visible; }
-            .reading .diagram svg { max-width: 100%; }
+            /* A drawing stays in one piece, on one sheet, and is as tall as
+               it is drawn: split over two sheets it would be printed over. */
+            .reading .diagram { display: block; overflow: visible; height: auto !important; break-inside: avoid; }
+            .reading .diagram svg { margin: 0 auto; max-width: 100%; max-height: 225mm; }
         }
         @media print and (max-width: 160mm) { .notebook { zoom: .88; } }  /* A5: 7 mm */
         @media print and (max-width: 115mm) { .notebook { zoom: .76; } }  /* A6: 6 mm */
@@ -714,6 +716,6 @@
             <ul id="visited-list"></ul>
         </section>
     </dialog>
-    <script type="module" src="./index-47ZVWG75.js"></script>
+    <script type="module" src="./index-GZBAO4WO.js"></script>
 </body>
 </html>
