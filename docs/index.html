@@ -262,89 +262,90 @@
             outline: 0;
             color: var(--ink);
             font: 400 var(--text)/var(--line) 'Handlee', 'Comic Sans MS', cursive;
-            white-space: pre-wrap;
             overflow-wrap: break-word;
             -webkit-font-variant-ligatures: none;
             font-variant-ligatures: none;
         }
+        .source { white-space: pre-wrap; }
+        /* A page is read rendered, and edited as the Markdown it is. */
+        .source, .editing .reading { display: none; }
+        .editing .source { display: block; }
+
         .content p, .content h1, .content h2, .content h3, .content h4, .content h5, .content h6,
         .content ul, .content ol, .content blockquote, .content pre, .content hr { margin: 0; }
         /* One empty line between blocks, as in the Markdown. */
-        .content > :not(:first-child) { margin-top: var(--line); }
+        .reading > :not(:first-child) { margin-top: var(--line); }
+
+        /* Headings, the same read or being written: in the source a heading
+           is its line, with the # still in front of it. */
         .content h1, .content h2, .content h3, .content h4, .content h5, .content h6, .content pre,
+        .source .h1, .source .h2, .source .h3, .source .h4, .source .h5, .source .h6, .source .code,
         .content strong, .content code {
             --lines: 1;             /* rules per line of this block's writing */
             position: relative;
         }
-        .content h1, .content h2, .content h3, .content h4, .content h5, .content h6, .content pre {
+        .content h1, .content h2, .content h3, .content h4, .content h5, .content h6, .content pre,
+        .source .h1, .source .h2, .source .h3, .source .h4, .source .h5, .source .h6, .source .code {
             line-height: calc(var(--lines) * var(--line));
         }
-        .content h1 { top: var(--shift-h1, 11px); }
-        .content h2 { top: var(--shift-h2, -2px); }
-        .content h3 { top: var(--shift-h3, -1px); }
-        .content h4, .content h5, .content h6 { top: var(--shift-h4, 0px); }
-        .content pre { top: var(--shift-pre, 0px); }
+        .content h1, .source .h1 { top: var(--shift-h1, 11px); }
+        .content h2, .source .h2 { top: var(--shift-h2, -2px); }
+        .content h3, .source .h3 { top: var(--shift-h3, -1px); }
+        .content h4, .content h5, .content h6, .source .h4, .source .h5, .source .h6 { top: var(--shift-h4, 0px); }
+        .content pre, .source .code { top: var(--shift-pre, 0px); }
         .content strong { top: var(--shift-strong, 0px); }
         .content code { top: var(--shift-code, 0px); }
-        .content pre code, .content h1 strong, .content h2 strong, .content h3 strong,
-        .content h4 strong, .content h5 strong, .content h6 strong { top: 0; }
-        .content h1, .content h2, .content h3, .content h4, .content h5, .content h6 { font-weight: bold; }
-        .content h1 { font-size: 34px; --lines: 2; }
-        .content h2 { font-size: 27px; }
-        .content h3 { font-size: 22px; }
-        .content h4, .content h5, .content h6 { font-size: var(--text); }
+        .content pre code, .content :is(h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6) strong { top: 0; }
+        .content h1, .content h2, .content h3, .content h4, .content h5, .content h6,
+        .source .h1, .source .h2, .source .h3, .source .h4, .source .h5, .source .h6 { font-weight: bold; }
+        .content h1, .source .h1 { font-size: 34px; --lines: 2; }
+        .content h2, .source .h2 { font-size: 27px; }
+        .content h3, .source .h3 { font-size: 22px; }
+        .content h4, .content h5, .content h6, .source .h4, .source .h5, .source .h6 { font-size: var(--text); }
         .content strong { font-weight: bold; }
         .content em { font-style: italic; }
         /* No underline: the rule already runs under the words. */
-        .content a { color: var(--accent); text-decoration: none; cursor: pointer; }
-        .content ol { padding-left: 1.3em; }
+        .content a, .source .address { color: var(--accent); text-decoration: none; }
+        .content a { cursor: pointer; }
+
+        /* The marks of the syntax stay where they are, a little fainter. */
+        .source .syntax { color: var(--faded-ink); font-weight: normal; }
+        .source .quote { color: var(--faded-ink); }
+        .source .code { font: 15px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+        .reading ol { padding-left: 1.3em; }
         /* A bullet is a dash written in front of the item, in the same hand. */
-        .content ul { list-style: none; padding-left: 0; }
-        .content ul > li { padding-left: .85em; }
-        .content ul > li > p:first-child::before {
-            content: '\2013';
-            display: inline-block;
-            width: .85em;
-            margin-left: -.85em;
-        }
-        .content li > * + * { margin-top: 0; }
-        .content ul:not([data-tight="true"]) > li + li, .content ol:not([data-tight="true"]) > li + li { margin-top: var(--line); }
-        .content blockquote {
+        .reading ul { list-style: none; padding-left: 0; }
+        .reading ul > li { position: relative; padding-left: .85em; }
+        .reading ul > li::before { content: '\2013'; position: absolute; left: 0; }
+        .reading li > p + p, .reading li > p + ul, .reading li > p + ol { margin-top: 0; }
+        /* A list written with empty lines between its items keeps them. */
+        .reading li:has(> p) + li { margin-top: var(--line); }
+        .reading blockquote {
             padding-left: 14px;
             border-left: 2px solid var(--faded-ink);
             color: var(--faded-ink);
         }
-        .content blockquote > * + * { margin-top: var(--line); }
+        .reading blockquote > * + * { margin-top: var(--line); }
         .content code {
             font: 15px/1 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
             padding: 2px 0;
             background: color-mix(in srgb, var(--rule) 45%, transparent);
             border-radius: 4px;
         }
-        .content pre {
+        .reading pre {
             font-size: 15px;
             padding: 0 10px;
             border-radius: 6px;
             background: color-mix(in srgb, var(--rule) 45%, transparent);
             white-space: pre-wrap;
         }
-        .content pre code { background: none; padding: 0; line-height: inherit; }
-        .content hr {
+        .reading pre code { background: none; padding: 0; line-height: inherit; }
+        .reading hr {
             height: var(--line);
             border: 0;
             background: linear-gradient(var(--faded-ink), var(--faded-ink)) center / 40% 2px no-repeat;
         }
-        .content .ProseMirror-gapcursor { display: none; pointer-events: none; position: absolute; }
-        .content .ProseMirror-gapcursor::after {
-            content: '';
-            display: block;
-            position: absolute;
-            top: -2px;
-            width: 20px;
-            border-top: 1px solid var(--ink);
-        }
-        .content.ProseMirror-focused .ProseMirror-gapcursor { display: block; }
-        .content .ProseMirror-selectednode { outline: 2px solid var(--accent); }
 
         /* What is going on, said in a card at the bottom of the window */
         .note {
@@ -489,6 +490,8 @@
                 background-position: 0 calc(-1 * var(--shift-text, 9px));
             }
             .content { min-height: 0; padding: 0 2px; }
+            .source, .editing .source { display: none; }
+            .editing .reading { display: block; }
             .content code, .content pre { background: none; }
             .content a { color: inherit; }
         }
@@ -551,7 +554,8 @@
             </div>
         </header>
         <div id="sheet" class="sheet">
-            <div id="content" class="content" role="textbox" aria-multiline="true" aria-label="Page text" spellcheck="false"></div>
+            <article id="content" class="content reading"></article>
+            <div id="source" class="content source" role="textbox" aria-multiline="true" aria-label="Page text, as Markdown" spellcheck="false"></div>
         </div>
         <aside id="note" class="note" role="status" aria-live="polite" hidden>
             <img id="note-image" class="note-image" alt="QR code for this page" hidden>
@@ -577,6 +581,6 @@
             <ul id="visited-list"></ul>
         </section>
     </dialog>
-    <script type="module" src="./index-P6OLL2Y3.js"></script>
+    <script type="module" src="./index-R75DPQDZ.js"></script>
 </body>
 </html>

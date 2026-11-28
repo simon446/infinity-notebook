@@ -11,13 +11,9 @@
     "@huggingface/tokenizers": "0.2.0",
     "markdown-it": "^15.0.3",
     "prosemirror-commands": "^1.7.2",
-    "prosemirror-example-setup": "^1.2.4",
     "prosemirror-history": "^1.5.1",
-    "prosemirror-inputrules": "^1.6.0",
     "prosemirror-keymap": "^1.2.3",
-    "prosemirror-markdown": "^1.13.9",
     "prosemirror-model": "^1.25.13",
-    "prosemirror-schema-list": "^1.6.0",
     "prosemirror-state": "^1.4.4",
     "prosemirror-view": "^1.42.9",
     "qrcode-generator": "^2.0.4"

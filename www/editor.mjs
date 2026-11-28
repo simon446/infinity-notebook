@@ -1,210 +1,336 @@
-// The page as rich text. What is edited is a ProseMirror document; what the
-// notebook stores, searches for and numbers is that document as Markdown.
+// The page, in its two forms.
+//
+// A page's text is Markdown, and it is edited as Markdown: what is typed is
+// what the page holds, character for character. The source is only dressed up
+// a little while editing (headings are larger, the marks of the syntax are
+// fainter) and nothing in it is ever hidden or rewritten. Reading a page shows
+// the same text rendered.
 
 import MarkdownIt from "markdown-it";
-import { lift, setBlockType, toggleMark, wrapIn } from "prosemirror-commands";
-import { exampleSetup } from "prosemirror-example-setup";
+import { baseKeymap, chainCommands } from "prosemirror-commands";
+import { history, redo, undo } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
-import {
-  defaultMarkdownParser,
-  defaultMarkdownSerializer,
-  MarkdownParser,
-  MarkdownSerializer,
-  schema as markdownSchema,
-} from "prosemirror-markdown";
-import { Schema } from "prosemirror-model";
-import { liftListItem, sinkListItem, wrapInList } from "prosemirror-schema-list";
-import { EditorState, Plugin } from "prosemirror-state";
+import { Fragment, Schema, Slice } from "prosemirror-model";
+import { EditorState, Plugin, TextSelection } from "prosemirror-state";
 import { Decoration, DecorationSet, EditorView } from "prosemirror-view";
 
-// The Markdown schema without images: a page is text, and a random page
-// should not make the browser fetch whatever address it happens to name.
-// New lists are tight: one item per line, without blank lines in between.
-const tightByDefault = (name) => {
-  const spec = markdownSchema.spec.nodes.get(name);
-  return { ...spec, attrs: { ...spec.attrs, tight: { default: true } } };
-};
+// ---------------------------------------------------------------- reading
 
-const schema = new Schema({
-  nodes: markdownSchema.spec.nodes
-    .remove("image")
-    .update("heading", { ...markdownSchema.spec.nodes.get("heading"), content: "inline*" })
-    .update("bullet_list", tightByDefault("bullet_list"))
-    .update("ordered_list", tightByDefault("ordered_list")),
-  // No links either. An address in the text is shown as a link (see
-  // linkAddresses), but the text itself stays plain: what you type is what
-  // the page holds.
-  marks: markdownSchema.spec.marks.remove("link"),
-});
-
-// A line break in the text is a line break on the page, both ways. (Plain
-// Markdown would join the lines and write a break as a backslash.) With no
-// links, [text](address) and <address> are ordinary text.
-const markdownIt = MarkdownIt("commonmark", { html: false }).disable(["image", "link", "autolink"]);
-// Only addresses written out with their scheme (https://...) count as links.
+// Markdown as it is rendered for reading. No HTML and no images: a page is
+// text, and a random page should not make the browser fetch whatever address
+// it happens to name. A line break in the text is a line break on the page.
+// Links are those written as [text](address) and any address written out
+// with its scheme (https://...).
+const markdownIt = MarkdownIt("commonmark", { html: false, breaks: true, linkify: true }).enable("linkify").disable("image");
 const linkify = markdownIt.linkify.set({ fuzzyLink: false, fuzzyEmail: false });
 
-const { image: _imageToken, link: _linkToken, ...tokens } = defaultMarkdownParser.tokens;
-const parser = new MarkdownParser(schema, markdownIt, {
-  ...tokens,
-  softbreak: { node: "hard_break" },
+// Links open in a new tab, and tell the site nothing about this page.
+markdownIt.renderer.rules.link_open = (tokens, index, options, _env, self) => {
+  tokens[index].attrSet("target", "_blank");
+  tokens[index].attrSet("rel", "noopener noreferrer nofollow");
+  return self.renderToken(tokens, index, options);
+};
+
+/** The page's first large heading, if it has one. */
+export function titleOf(markdown) {
+  const tokens = markdownIt.parse(markdown, {});
+  const heading = tokens.findIndex((token) => token.type === "heading_open" && token.tag === "h1");
+  if (heading < 0) return undefined;
+  const words = (tokens[heading + 1].children ?? []).filter((child) => child.type === "text" || child.type === "code_inline");
+  return words.map((child) => child.content).join("").trim() || undefined;
+}
+
+// ---------------------------------------------------------------- editing
+
+// The source is a list of lines of plain text.
+const schema = new Schema({
+  nodes: {
+    doc: { content: "line+" },
+    line: { content: "text*", toDOM: () => ["div", { class: "line" }, 0], parseDOM: [{ tag: "div" }, { tag: "p" }] },
+    text: {},
+  },
 });
 
-const { image: _imageNode, ...nodes } = defaultMarkdownSerializer.nodes;
-const { link: _linkMark, ...marks } = defaultMarkdownSerializer.marks;
-const serializer = new MarkdownSerializer(
-  {
-    ...nodes,
-    hard_break(state, node, parent, index) {
-      for (let i = index + 1; i < parent.childCount; i++) {
-        if (parent.child(i).type !== node.type) {
-          state.write("\n");
-          return;
-        }
-      }
-    },
-  },
-  marks
-);
+const lineNode = (text) => schema.node("line", null, text === "" ? [] : [schema.text(text)]);
+const toLines = (text) => text.replace(/\r\n?/g, "\n").split("\n").map(lineNode);
+const toDoc = (text) => schema.node("doc", null, toLines(text));
 
-const parse = (markdown) => parser.parse(markdown) ?? schema.topNodeType.createAndFill();
-const serialize = (doc) => serializer.serialize(doc);
-
-/** The Markdown that `markdown` turns into once it has been on the page. */
-export function canonical(markdown) {
-  return serialize(parse(markdown));
+function toText(doc) {
+  const lines = [];
+  doc.forEach((line) => lines.push(line.textContent));
+  return lines.join("\n");
 }
 
-/** Draws every address in the text as a link, without changing the text. */
-function findAddresses(doc) {
-  const links = [];
-  doc.descendants((block, blockStart) => {
-    if (!block.isTextblock) return true;
-    if (block.type.spec.code) return false;
-    // The block's text, with a line break standing in for anything that is
-    // not text (which is a line break). Offsets in it are then offsets in
-    // the block, and an address ends where its line does.
-    const text = block.textBetween(0, block.content.size, undefined, "\n");
-    const from = blockStart + 1;
-    for (const match of linkify.match(text) ?? []) {
-      const [start, end] = [from + match.index, from + match.lastIndex];
-      if (doc.rangeHasMark(start, end, schema.marks.code)) continue;
-      links.push(Decoration.inline(start, end, {
-        nodeName: "a",
-        href: match.url,
-        // Open in a new tab, and tell the site nothing about this page.
-        target: "_blank",
-        rel: "noopener noreferrer nofollow",
-      }));
+const HEADING = /^(#{1,6})(?=\s|$)/;
+const QUOTE = /^(\s*>+\s?)/;
+const BULLET = /^(\s*)([-*+])(\s+)/;
+const NUMBERED = /^(\s*)(\d+)([.)])(\s+)/;
+const RULE = /^\s{0,3}([-*_])(\s*\1){2,}\s*$/;
+const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
+
+// Marks within a line: `code`, **strong**, *emphasis*, [text](address), and a
+// backslash before a character it escapes.
+const INLINE = /(`+)(.+?)\1|(\*\*|__)(\S(?:.*?\S)?)\3|(\*|_)(\S(?:.*?\S)?)\5|\[([^\]\n]+)\]\(([^)\s]+)\)|\\[\\`*_{}[\]()#+\-.!>~]/g;
+const WORD = /[\p{L}\p{N}]/u;
+
+/**
+ * Dresses the source: which lines are headings, quotes or code, and which
+ * characters are syntax. It only adds classes; the text is not touched.
+ */
+function dress(doc) {
+  const dressing = [];
+  let fence; // the fence of the code block the line is in, if any
+  doc.forEach((line, offset) => {
+    const start = offset + 1;
+    const text = line.textContent;
+    const wholeLine = (name) => dressing.push(Decoration.node(offset, offset + line.nodeSize, { class: name }));
+    const span = (from, to, attrs) => { if (from < to) dressing.push(Decoration.inline(start + from, start + to, attrs)); };
+    const syntax = (from, to) => span(from, to, { class: "syntax" });
+
+    const fenced = FENCE.exec(text);
+    if (fence) {
+      wholeLine("code");
+      if (fenced && fenced[1][0] === fence[0] && fenced[1].length >= fence.length && text.trim() === fenced[1]) fence = undefined;
+      return;
     }
-    return false;
+    if (fenced) {
+      fence = fenced[1];
+      wholeLine("code");
+      return;
+    }
+
+    let match;
+    if ((match = HEADING.exec(text))) {
+      wholeLine(`h${match[1].length}`);
+      syntax(0, match[1].length);
+    } else if (RULE.test(text)) {
+      syntax(0, text.length);
+      return;
+    } else if ((match = QUOTE.exec(text))) {
+      wholeLine("quote");
+      syntax(0, match[1].length);
+    } else if ((match = BULLET.exec(text))) {
+      syntax(match[1].length, match[1].length + match[2].length);
+    } else if ((match = NUMBERED.exec(text))) {
+      syntax(match[1].length, match[1].length + match[2].length + match[3].length);
+    }
+
+    INLINE.lastIndex = 0;
+    while ((match = INLINE.exec(text))) {
+      const [all, ticks, , strong, , mark, , linkText, address] = match;
+      const from = match.index;
+      const to = from + all.length;
+      if (ticks) {
+        syntax(from, from + ticks.length);
+        span(from + ticks.length, to - ticks.length, { nodeName: "code" });
+        syntax(to - ticks.length, to);
+      } else if (strong || mark) {
+        const marker = strong ?? mark;
+        // An underscore inside a word is just an underscore.
+        if (marker[0] === "_" && (WORD.test(text[from - 1] ?? "") || WORD.test(text[to] ?? ""))) {
+          INLINE.lastIndex = from + 1;
+          continue;
+        }
+        syntax(from, from + marker.length);
+        span(from + marker.length, to - marker.length, { nodeName: strong ? "strong" : "em" });
+        syntax(to - marker.length, to);
+        // What is inside may be marked up in turn.
+        INLINE.lastIndex = from + marker.length;
+      } else if (linkText) {
+        syntax(from, from + 1);
+        span(from + 1, from + 1 + linkText.length, { class: "address" });
+        syntax(from + 1 + linkText.length, to);
+      } else {
+        syntax(from, from + 1);
+      }
+    }
+    for (const found of linkify.match(text) ?? []) span(found.index, found.lastIndex, { class: "address" });
   });
-  return DecorationSet.create(doc, links);
+  return DecorationSet.create(doc, dressing);
 }
 
-const linkAddresses = new Plugin({
+const dressSource = new Plugin({
   state: {
-    init: (_config, state) => findAddresses(state.doc),
-    apply: (transaction, links) => (transaction.docChanged ? findAddresses(transaction.doc) : links),
+    init: (_config, state) => dress(state.doc),
+    apply: (transaction, dressing) => (transaction.docChanged ? dress(transaction.doc) : dressing),
   },
   props: {
     decorations(state) {
-      return linkAddresses.getState(state);
+      return dressSource.getState(state);
     },
   },
 });
 
-/**
- * Opens the link under a click or tap while the page is being edited. (A page
- * that is only being read has ordinary links, which the browser opens.)
- */
-function openLink(view, _position, event) {
-  if (!view.editable) return false;
-  const anchor = event.target.closest?.("a[href]");
-  if (!anchor || event.button !== 0) return false;
-  let address;
-  try {
-    address = new URL(anchor.getAttribute("href"), window.location.href);
-  } catch {
+/** The lines the selection touches: [{ text, from }], `from` being where the line's text starts. */
+function selectedLines(state) {
+  const lines = [];
+  state.doc.nodesBetween(state.selection.from, state.selection.to, (node, position) => {
+    if (node.type === schema.nodes.line) lines.push({ text: node.textContent, from: position + 1 });
     return false;
-  }
-  if (!["http:", "https:", "mailto:"].includes(address.protocol)) return false;
-  window.open(address.href, "_blank", "noopener,noreferrer");
-  return true;
+  });
+  return lines;
 }
 
-/** True if the selection is inside a node of this type (with these attributes). */
-function inside(state, type, attrs) {
-  const { $from, to } = state.selection;
-  for (let depth = $from.depth; depth > 0; depth--) {
-    const node = $from.node(depth);
-    if (node.type === type && (!attrs || Object.keys(attrs).every((key) => node.attrs[key] === attrs[key]))) {
-      return to <= $from.end(depth);
-    }
-  }
-  return false;
+/** Replaces the start of a line: `length` characters by `prefix`. */
+function setPrefix(transaction, line, length, prefix) {
+  const from = transaction.mapping.map(line.from, -1);
+  if (prefix === "") transaction.delete(from, from + length);
+  else transaction.replaceWith(from, from + length, schema.text(prefix));
 }
 
-function markActive(state, type) {
-  const { from, $from, to, empty } = state.selection;
-  if (empty) return !!type.isInSet(state.storedMarks || $from.marks());
-  return state.doc.rangeHasMark(from, to, type);
-}
-
-/** A formatting button: what it does and whether it is on at the cursor. */
-function mark(type) {
-  return { run: toggleMark(type), active: (state) => markActive(state, type) };
-}
-
-function block(type, attrs) {
-  const active = (state) => inside(state, type, attrs);
+/** A button that puts a mark at the start of the selected lines, or takes it off. */
+function linePrefix(pattern, prefix) {
+  const has = (line) => pattern.test(line.text);
+  // What is at the start of a line now, which the mark replaces.
+  const old = (line) => {
+    const heading = /^#{1,6}(\s+|$)/.exec(line.text);
+    return (heading ?? QUOTE.exec(line.text) ?? BULLET.exec(line.text) ?? NUMBERED.exec(line.text))?.[0] ?? "";
+  };
   return {
-    run: (state, dispatch) => (active(state) ? setBlockType(schema.nodes.paragraph) : setBlockType(type, attrs))(state, dispatch),
-    active,
+    active: (state) => selectedLines(state).every(has),
+    run(state, dispatch) {
+      const lines = selectedLines(state);
+      const remove = lines.every(has);
+      const transaction = state.tr;
+      lines.forEach((line, index) => {
+        setPrefix(transaction, line, old(line).length, remove ? "" : typeof prefix === "function" ? prefix(index) : prefix);
+      });
+      dispatch(transaction.scrollIntoView());
+      return true;
+    },
   };
 }
 
-function wrapper(type, wrap, unwrap) {
-  const active = (state) => inside(state, type);
-  return { run: (state, dispatch) => (active(state) ? unwrap : wrap)(state, dispatch), active };
+/** A button that puts a mark around the selection, or takes it off. */
+function wrap(marker) {
+  const around = (state) => {
+    const { from, to, $from, $to } = state.selection;
+    const size = marker.length;
+    if (!$from.sameParent($to)) return false;
+    const [start, end] = [$from.start(), $from.end()];
+    if (from - size < start || to + size > end) return false;
+    if (state.doc.textBetween(from - size, from) !== marker || state.doc.textBetween(to, to + size) !== marker) return false;
+    // "**" around the selection is not "*" around it, though "***" is both.
+    if (size === 1 && from - 2 >= start && state.doc.textBetween(from - 2, from) === marker + marker) {
+      return from - 3 >= start && state.doc.textBetween(from - 3, from) === marker.repeat(3);
+    }
+    return true;
+  };
+  return {
+    active: around,
+    run(state, dispatch) {
+      const { from, to, $from, $to } = state.selection;
+      if (!$from.sameParent($to)) return false;
+      const transaction = state.tr;
+      if (around(state)) {
+        transaction.delete(to, to + marker.length).delete(from - marker.length, from);
+      } else {
+        transaction.insertText(marker, to).insertText(marker, from);
+        transaction.setSelection(TextSelection.create(transaction.doc, from + marker.length, to + marker.length));
+      }
+      dispatch(transaction.scrollIntoView());
+      return true;
+    },
+  };
 }
 
 const COMMANDS = {
-  strong: mark(schema.marks.strong),
-  em: mark(schema.marks.em),
-  heading1: block(schema.nodes.heading, { level: 1 }),
-  heading2: block(schema.nodes.heading, { level: 2 }),
-  bullet_list: wrapper(schema.nodes.bullet_list, wrapInList(schema.nodes.bullet_list), liftListItem(schema.nodes.list_item)),
-  ordered_list: wrapper(schema.nodes.ordered_list, wrapInList(schema.nodes.ordered_list), liftListItem(schema.nodes.list_item)),
-  blockquote: wrapper(schema.nodes.blockquote, wrapIn(schema.nodes.blockquote), lift),
+  strong: wrap("**"),
+  em: wrap("*"),
+  heading1: linePrefix(/^#(\s|$)/, "# "),
+  heading2: linePrefix(/^##(\s|$)/, "## "),
+  bullet_list: linePrefix(BULLET, "- "),
+  ordered_list: linePrefix(NUMBERED, (index) => `${index + 1}. `),
+  blockquote: linePrefix(/^\s*>/, "> "),
 };
 
 /**
- * Turns `mount` into the page.
+ * Enter in a list or a quote starts the next item. On an item with nothing
+ * in it, it ends the list instead.
+ */
+function continueList(state, dispatch) {
+  const { $from, empty } = state.selection;
+  if (!empty) return false;
+  const text = $from.parent.textContent;
+  const bullet = BULLET.exec(text);
+  const numbered = NUMBERED.exec(text);
+  const quote = !bullet && !numbered && QUOTE.exec(text);
+  const start = (bullet ?? numbered ?? quote)?.[0];
+  if (!start || $from.parentOffset < start.length) return false;
+  const transaction = state.tr;
+  if (text.length === start.length) {
+    transaction.delete($from.start(), $from.end());
+  } else {
+    const next = numbered ? `${numbered[1]}${Number(numbered[2]) + 1}${numbered[3]}${numbered[4]}` : start;
+    transaction.split($from.pos).insertText(next);
+  }
+  dispatch(transaction.scrollIntoView());
+  return true;
+}
+
+/** Tab moves a list item a level in, Shift + Tab back out. */
+function indent(direction) {
+  return (state, dispatch) => {
+    const lines = selectedLines(state).filter((line) => BULLET.test(line.text) || NUMBERED.test(line.text));
+    if (lines.length === 0) return false;
+    const transaction = state.tr;
+    for (const line of lines) {
+      if (direction > 0) setPrefix(transaction, line, 0, "  ");
+      else setPrefix(transaction, line, /^ {0,2}/.exec(line.text)[0].length, "");
+    }
+    dispatch(transaction);
+    return true;
+  };
+}
+
+/** Text from elsewhere comes in as the lines it is. */
+function linesSlice(text) {
+  return new Slice(Fragment.from(toLines(text)), 1, 1);
+}
+
+/**
+ * Sets up the page.
+ * @param source the element to edit the Markdown in
+ * @param reading the element that shows it rendered
  * @param onEdit called after the person changed the page
  * @param onSubmit called when they press Ctrl/Cmd + Enter
  * @param onState called after every change of text or cursor
  */
-export function createEditor(mount, { onEdit, onSubmit, onState }) {
+export function createEditor(source, reading, { onEdit, onSubmit, onState }) {
   let editable = true;
+  let rendered;
   const view = new EditorView(
-    { mount },
+    { mount: source },
     {
       state: EditorState.create({
         schema,
         plugins: [
+          history(),
           keymap({
             "Mod-Enter": () => (onSubmit(), true),
-            // In a list, Tab moves the item a level in and Shift + Tab back out.
-            Tab: sinkListItem(schema.nodes.list_item),
-            "Shift-Tab": liftListItem(schema.nodes.list_item),
+            "Mod-z": undo,
+            "Shift-Mod-z": redo,
+            "Mod-y": redo,
+            "Mod-b": (state, dispatch) => COMMANDS.strong.run(state, dispatch),
+            "Mod-i": (state, dispatch) => COMMANDS.em.run(state, dispatch),
+            Enter: chainCommands(continueList, baseKeymap.Enter),
+            Tab: indent(1),
+            "Shift-Tab": indent(-1),
           }),
-          ...exampleSetup({ schema, menuBar: false }),
-          linkAddresses,
+          keymap(baseKeymap),
+          dressSource,
         ],
       }),
       editable: () => editable,
-      handleClick: openLink,
+      clipboardTextParser: linesSlice,
+      clipboardTextSerializer: (slice) => slice.content.textBetween(0, slice.content.size, "\n"),
+      // Whatever is pasted comes in as its plain text, never as formatting.
+      handlePaste(view, event) {
+        const text = event.clipboardData?.getData("text/plain");
+        if (!text) return false;
+        view.dispatch(view.state.tr.replaceSelection(linesSlice(text)).scrollIntoView());
+        return true;
+      },
       dispatchTransaction(transaction) {
         view.updateState(view.state.apply(transaction));
         if (transaction.docChanged && !transaction.getMeta("written")) onEdit();
@@ -213,26 +339,36 @@ export function createEditor(mount, { onEdit, onSubmit, onState }) {
     }
   );
 
-  return {
-    getMarkdown: () => serialize(view.state.doc),
+  const editor = {
+    getMarkdown: () => toText(view.state.doc),
 
     /** Puts `markdown` on the page, touching only what differs from what is there. */
     setMarkdown(markdown) {
       const before = view.state.doc;
-      const after = parse(markdown);
+      const after = toDoc(markdown);
       const start = before.content.findDiffStart(after.content);
-      if (start === null) return;
-      let { a: endBefore, b: endAfter } = before.content.findDiffEnd(after.content);
-      const overlap = start - Math.min(endBefore, endAfter);
-      if (overlap > 0) {
-        endBefore += overlap;
-        endAfter += overlap;
+      if (start !== null) {
+        let { a: endBefore, b: endAfter } = before.content.findDiffEnd(after.content);
+        const overlap = start - Math.min(endBefore, endAfter);
+        if (overlap > 0) {
+          endBefore += overlap;
+          endAfter += overlap;
+        }
+        const transaction = view.state.tr
+          .replace(start, endBefore, after.slice(start, endAfter))
+          .setMeta("written", true)
+          .setMeta("addToHistory", false);
+        view.dispatch(transaction);
       }
-      const transaction = view.state.tr
-        .replace(start, endBefore, after.slice(start, endAfter))
-        .setMeta("written", true)
-        .setMeta("addToHistory", false);
-      view.dispatch(transaction);
+      editor.render();
+    },
+
+    /** Shows the page as it reads, from what the source holds now. */
+    render() {
+      const markdown = editor.getMarkdown();
+      if (markdown === rendered) return;
+      rendered = markdown;
+      reading.innerHTML = markdownIt.render(markdown);
     },
 
     setEditable(value) {
@@ -244,14 +380,7 @@ export function createEditor(mount, { onEdit, onSubmit, onState }) {
 
     focus: () => view.focus(),
 
-    /** The page's first large heading, if it has one. */
-    title() {
-      let title;
-      view.state.doc.forEach((node) => {
-        if (title === undefined && node.type === schema.nodes.heading && node.attrs.level === 1) title = node.textContent.trim();
-      });
-      return title;
-    },
+    title: () => titleOf(editor.getMarkdown()),
 
     /** Runs a formatting command by name, keeping the cursor on the page. */
     run(name) {
@@ -262,4 +391,5 @@ export function createEditor(mount, { onEdit, onSubmit, onState }) {
     /** Whether the formatting `name` applies at the cursor. */
     active: (name) => COMMANDS[name].active(view.state),
   };
+  return editor;
 }

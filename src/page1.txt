@@ -6,7 +6,7 @@ Press the pencil in the corner and write something, then press **Find page** to 
 
 The pencil also brings out the page number, arrows to flip pages, a dice for a random page, and a button that copies a short link.
 
-Pages are kept as Markdown, so **bold**, *italic*, headings, lists and quotes all work.
+Pages are written in Markdown, so **bold**, *italic*, headings, lists, quotes and [links](https://simon446.me/) all work.
 
 Predictable text is near the front. Gibberish is far in the back.
 

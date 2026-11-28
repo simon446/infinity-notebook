@@ -1,5 +1,5 @@
 import initWasm, * as wasm from "./pkg/infinity_notebook.js";
-import { canonical, createEditor } from "./editor.mjs";
+import { createEditor } from "./editor.mjs";
 import { qrPng, qrSvg } from "./qr.mjs";
 
 await initWasm();
@@ -34,9 +34,8 @@ const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "\u2318 + Enter" :
 // A tab with nothing written in it, until the page has been read.
 const BLANK_TITLE = "\u200e";
 
-// Pages are Markdown. The page shows it as rich text, and gives it back in
-// one fixed spelling: `canonical(text)` is how `text` reads once on the page.
-const FIRST_PAGE = canonical(wasm.first_page());
+// Pages are Markdown: rendered for reading, and edited as the text they are.
+const FIRST_PAGE = wasm.first_page();
 
 let pageNumber;          // the page being shown, as a decimal string
 let pageContent = "";    // its Markdown as the page gives it back, once known
@@ -204,7 +203,7 @@ function showPageName() {
 }
 
 const content = document.getElementById('content');
-const editor = createEditor(content, {
+const editor = createEditor(document.getElementById('source'), content, {
     onEdit: edited,
     onSubmit: () => search(),
     onState: showFormatting,
@@ -384,8 +383,12 @@ function setEditing(value) {
     editing = value;
     document.body.classList.toggle('editing', editing);
     syncEditable();
-    if (editing) editor.focus();
-    else if (!busy) hideNote();
+    if (editing) {
+        editor.focus();
+        return;
+    }
+    editor.render();
+    if (!busy) hideNote();
 }
 
 function setBusy(value) {
@@ -1043,6 +1046,8 @@ if (document.fonts) {
     Promise.all(sizes.map((size) => document.fonts.load(`${size} Handlee`))).then(setWritingOnRules, () => {});
 }
 window.addEventListener('resize', setWritingOnRules);
+// What is printed is the page as it reads, also in the middle of editing.
+window.addEventListener('beforeprint', () => editor.render());
 window.addEventListener('hashchange', showPage);
 
 // Pages visited before open at once, from what was kept of them.

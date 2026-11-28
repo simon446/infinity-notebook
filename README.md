@@ -29,13 +29,17 @@ python3 tools/convert_weights.py model.safetensors www/model
 
 ## The page
 
-A page is edited as rich text and kept as Markdown: the Markdown is what gets a page number.
-The editor (`www/editor.mjs`) is [ProseMirror](https://prosemirror.net) with its own
-`prosemirror-markdown`, without images or link syntax, and with line breaks kept as line
-breaks. Addresses in the text are shown as links without being stored as such.
+A page's text is Markdown, and it is the Markdown that gets a page number.
 
-A page opens for reading: just the ruled page and its writing. The pencil in the corner
-brings out the page number, page flipping and formatting.
+A page opens for reading: just the ruled page with its Markdown rendered (by
+[markdown-it](https://github.com/markdown-it/markdown-it), without HTML or images, and with
+line breaks kept as line breaks). Links are those written as `[text](address)` and any
+address written out with its scheme.
+
+The pencil in the corner brings out the page number, page flipping and formatting, and
+turns the page into its source: the Markdown exactly as it is, edited as plain text in a
+[ProseMirror](https://prosemirror.net) editor (`www/editor.mjs`) that only makes headings
+larger and the marks of the syntax fainter.
 
 Writing that has not been put on a page yet is kept as a draft in the browser's local
 storage, one per tab, and all drafts can be reopened from any tab. The pages that were
