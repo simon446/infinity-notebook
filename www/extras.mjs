@@ -122,7 +122,8 @@ function typesetMath(root) {
  */
 export function snap(root) {
   for (const block of root.children) {
-    if (block.classList.contains("diagram")) continue;
+    // (a diagram sets its own height, and code is whole lines by its styling)
+    if (block.classList.contains("diagram") || block.tagName === "PRE") continue;
     block.style.paddingTop = block.style.paddingBottom = "";
     const over = block.getBoundingClientRect().height % LINE;
     if (over < 0.5 || LINE - over < 0.5) continue;
@@ -242,8 +243,8 @@ function draw(source) {
 
 /**
  * Puts a drawing in its place. It keeps its own size, where the writing in it
- * is as large as the writing on the page, unless that is wider than the
- * window: then all of it shrinks to fit. It takes up whole lines. Its title
+ * is as large as the writing on the page; one wider than the window scrolls
+ * sideways. It takes up whole lines. Its title
  * is taken out of the drawing and written on the page, on the rules, with
  * room between it and the drawing.
  */

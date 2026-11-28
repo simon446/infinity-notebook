@@ -354,21 +354,28 @@
                square: a character of this font is 0.545em wide, and is
                spaced out to a third of a line. */
             letter-spacing: calc(var(--line) / 3 - 0.544921875em);
-            white-space: pre-wrap;
+            /* A line of code is not broken: what is too wide for the window
+               scrolls sideways, as tables and diagrams do. */
+            white-space: pre;
+            overflow-x: auto;
+            scrollbar-width: none;
+            /* The squares: the rules of the page, and these lines down it,
+               from the rule above the code to the rule below it. The block
+               is that much taller than its lines (and a little more below,
+               for the tails of letters), without taking more room. */
+            --rise: calc(1px + var(--shift-text, 9px) + var(--shift-pre, 0px));
+            --tail: 8px;
+            top: calc(var(--shift-pre, 0px) - var(--rise));
+            padding: var(--rise) 0 var(--tail);
+            margin-bottom: calc(-1 * (var(--rise) + var(--tail)));
+            background: linear-gradient(to right, var(--rule) 1px, transparent 1px) local 0 0 / var(--line) calc(100% - var(--rise) - var(--tail)) repeat-x;
         }
-        /* The squares: the rules of the page, and these lines down it. They
-           run from the rule above the code to the rule below it, and across
-           as many whole squares as fit. */
-        .reading pre::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: calc(-1px - var(--shift-text, 9px) - var(--shift-pre, 0px));
-            width: 100%;
-            width: calc(round(down, 100%, var(--line)) + 1px);
-            height: 100%;
-            background: linear-gradient(to right, var(--rule) 1px, transparent 1px) 0 0 / var(--line) 100%;
-            pointer-events: none;
+        .reading pre::-webkit-scrollbar, .reading .diagram::-webkit-scrollbar { display: none; }
+        /* It runs on past the column of writing, to the edge of the window,
+           over whole squares. */
+        .reading > pre {
+            width: calc(50% + 50vw - 12px);
+            width: calc(round(down, 50% + 50vw - 12px, var(--line)) + 1px);
         }
         .reading pre code { background: none; padding: 0; font-size: inherit; line-height: inherit; }
 
@@ -442,20 +449,23 @@
         .hljs-strong { font-weight: bold; }
 
         /* A diagram runs from edge to edge of the window if it needs to, past
-           the column of writing, and shrinks only when even that is too
+           the column of writing, and scrolls sideways when even that is too
            narrow. It takes up whole lines (extras.mjs sets its height). */
         .reading .diagram {
             display: flex;
             flex-direction: column;
-            align-items: center;
+            align-items: flex-start;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: none;
             margin-left: calc(50% - 50vw + 12px);
             margin-right: calc(50% - 50vw + 12px);
             margin-bottom: 0;
         }
         .reading .diagram:not(.drawn) { display: block; margin-left: 0; margin-right: 0; }
-        .reading .diagram svg { display: block; flex: none; margin: auto; max-width: 100%; height: auto; overflow: visible; }
+        .reading .diagram svg { display: block; flex: none; margin: auto; height: auto; overflow: visible; }
         /* its title is writing like any other, on the rules */
-        .reading .diagram figcaption { flex: none; max-width: 100%; text-align: center; }
+        .reading .diagram figcaption { flex: none; position: sticky; left: 0; width: 100%; text-align: center; }
         .reading .diagram svg text, .reading .diagram svg tspan { font-family: 'Handlee', 'Comic Sans MS', cursive; }
         /* a label on a line hides the line behind it */
         .reading .diagram .edgeLabel rect.background, .reading .diagram .labelBkg { fill: var(--paper) !important; stroke: none !important; opacity: 1 !important; }
@@ -614,8 +624,13 @@
             .content { min-height: 0; padding: 0 2px; }
             .source, .editing .source { display: none; }
             .editing .reading { display: block; }
-            .content code, .content pre { background: none; }
+            .content code { background: none; }
             .content a { color: inherit; }
+            /* paper does not scroll: code is broken and drawings shrink */
+            .reading pre { white-space: pre-wrap; overflow: visible; }
+            .reading > pre { width: auto; }
+            .reading .diagram { overflow: visible; }
+            .reading .diagram svg { max-width: 100%; }
         }
         @media print and (max-width: 160mm) { .notebook { zoom: .88; } }  /* A5: 7 mm */
         @media print and (max-width: 115mm) { .notebook { zoom: .76; } }  /* A6: 6 mm */
