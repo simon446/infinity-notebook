@@ -8,16 +8,56 @@ const LINE = 30; // height of a ruled line, as in index.html
 // ----------------------------------------------------------------- code
 
 let highlighter; // highlight.js, once a page has needed it
+let highlighterLoading;
+
+function loadHighlighter() {
+  return (highlighterLoading ??= import("highlight.js/lib/common").then((module) => { highlighter = module.default; }));
+}
+
+const ENTITIES = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#x27;": "'" };
+const colourings = new Map(); // language and code -> where its colours are
+
+/**
+ * Where the colours of `code` are, for colouring it without rewriting it:
+ * a list of { from, to, name }, with `name` the class of that stretch.
+ * Empty until the library is there; `whenReady` is called once it is.
+ */
+export function coloursOf(code, language, whenReady) {
+  if (!language) return [];
+  if (!highlighter) {
+    loadHighlighter().then(whenReady, () => {});
+    return [];
+  }
+  if (!highlighter.getLanguage(language)) return [];
+  const key = `${language}\n${code}`;
+  if (!colourings.has(key)) {
+    if (colourings.size > 300) colourings.clear();
+    // The library answers with the code escaped and its own spans around
+    // the coloured parts; this reads where those spans are.
+    const html = highlighter.highlight(code, { language, ignoreIllegals: true }).value;
+    const stretches = [];
+    const open = [];
+    let at = 0;
+    for (const [piece, name] of html.matchAll(/<span class="([^"]*)">|<\/span>|&[^;]+;|[^<&]+/g)) {
+      if (name !== undefined) open.push(name);
+      else if (piece === "</span>") open.pop();
+      else {
+        const length = (ENTITIES[piece] ?? piece).length;
+        if (open.length > 0) stretches.push({ from: at, to: at + length, name: open.join(" ") });
+        at += length;
+      }
+    }
+    colourings.set(key, at === code.length ? stretches : []);
+  }
+  return colourings.get(key);
+}
 
 /** Colours the code blocks under `root` that say what language they are in. */
 function colourCode(root) {
   const blocks = [...root.querySelectorAll('pre > code[class*="language-"]')].filter((code) => !code.dataset.coloured);
   if (blocks.length === 0) return;
   if (!highlighter) {
-    import("highlight.js/lib/common").then((module) => {
-      highlighter = module.default;
-      colourCode(root);
-    }, () => { /* the code stays as it is */ });
+    loadHighlighter().then(() => colourCode(root), () => { /* the code stays as it is */ });
     return;
   }
   for (const code of blocks) {
@@ -245,7 +285,8 @@ function place(figure, svg) {
 
 /** Draws the diagrams under `root`. Until one is drawn its source shows. */
 function drawDiagrams(root) {
-  for (const figure of root.querySelectorAll(".diagram:not(.drawn)")) {
+  // (one that is still being written is left as its source until it is whole)
+  for (const figure of root.querySelectorAll(".diagram:not(.drawn):not(.unfinished)")) {
     const source = figure.dataset.source;
     draw(source).then((svg) => {
       // The page may have changed while this was being drawn.

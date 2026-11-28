@@ -34,7 +34,11 @@ rules.fence = (tokens, index, options, env, self) => {
   const token = tokens[index];
   if (token.info.trim().toLowerCase() !== "mermaid") return renderFence(tokens, index, options, env, self);
   const source = escapeHtml(token.content);
-  return `<figure class="diagram" data-source="${source}"><pre><code>${source}</code></pre></figure>\n`;
+  // On a page that is still being read out, the last diagram may not be all
+  // there yet: it is whole once its closing fence has come.
+  const unfinished = env.growing && tokens.slice(index + 1).every((later) => later.nesting === -1)
+    && !/\n\s*(`{3,}|~{3,})\s*$/.test(env.source);
+  return `<figure class="diagram${unfinished ? " unfinished" : ""}" data-source="${source}"><pre><code>${source}</code></pre></figure>\n`;
 };
 
 // A table can be wider than the page: it then scrolls sideways on its own.

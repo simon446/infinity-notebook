@@ -223,7 +223,8 @@ function setWritingOnRules() {
     // Measured on a hidden twin of the page, so the editor never sees it.
     const twin = document.createElement('div');
     twin.className = content.className;
-    twin.style.cssText = 'position:absolute;visibility:hidden;top:0;left:0;padding:0;min-height:0';
+    // (shown for the measuring even while the page itself is put away for editing)
+    twin.style.cssText = 'display:block;position:absolute;visibility:hidden;top:0;left:0;padding:0;min-height:0';
     sheet.append(twin);
 
     const measure = (tag, inner = "") => {
@@ -291,9 +292,9 @@ function inkBelowBaseline(font, size, ratio) {
 }
 
 /** Puts Markdown on the page. */
-function write(markdown) {
+function write(markdown, growing = false) {
     written = markdown;
-    editor.setMarkdown(markdown);
+    editor.setMarkdown(markdown, growing);
 }
 
 /** Lights up the formatting buttons that apply at the cursor. */
@@ -492,7 +493,7 @@ async function showPage() {
                     latest = text;
                     frame ??= requestAnimationFrame(() => {
                         frame = undefined;
-                        if (!thisJob.aborted && !thisJob.finished && !before.startsWith(latest)) write(latest);
+                        if (!thisJob.aborted && !thisJob.finished && !before.startsWith(latest)) write(latest, true);
                     });
                 },
             }, thisJob);
@@ -956,13 +957,15 @@ previousButton.addEventListener('click', () => flip(-1n));
 nextButton.addEventListener('click', () => flip(1n));
 
 // Page Up and Page Down flip pages, and so do the arrow keys while nothing
-// is being typed.
+// is being typed. Only with the tools out: a page that is just being read
+// stays the page it is.
 document.addEventListener('keydown', function (e) {
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     if (e.key === 'Escape' && editing && !draftsDialog.open && document.activeElement !== pageNumberElement) {
         setEditing(false);
         return;
     }
+    if (!editing) return;
     const typing = editor.hasFocus() || document.activeElement === pageNumberElement;
     let pages;
     if (e.key === 'PageDown' || (e.key === 'ArrowRight' && !typing)) pages = 1n;
@@ -980,7 +983,7 @@ sheet.addEventListener('touchstart', function (e) {
     swipe = e.touches.length === 1 ? { x, y, time: Date.now() } : undefined;
 }, { passive: true });
 sheet.addEventListener('touchend', function (e) {
-    if (!swipe || searchMode) return;
+    if (!swipe || searchMode || !editing) return;
     const { clientX: x, clientY: y } = e.changedTouches[0];
     const [dx, dy] = [x - swipe.x, y - swipe.y];
     const quick = Date.now() - swipe.time < 600;

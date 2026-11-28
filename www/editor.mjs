@@ -13,7 +13,7 @@ import { Fragment, Schema, Slice } from "prosemirror-model";
 import { EditorState, Plugin, TextSelection } from "prosemirror-state";
 import { Decoration, DecorationSet, EditorView } from "prosemirror-view";
 
-import { enhance } from "./extras.mjs";
+import { coloursOf, enhance } from "./extras.mjs";
 import { linkify, markdownIt, titleOf } from "./markdown.mjs";
 
 // ---------------------------------------------------------------- editing
@@ -56,6 +56,24 @@ const WORD = /[\p{L}\p{N}]/u;
 function dress(doc) {
   const dressing = [];
   let fence; // the fence of the code block the line is in, if any
+  let block; // that block's language and lines of code
+  // Code is coloured as it is when read.
+  const colour = () => {
+    const starts = [];
+    let length = 0;
+    for (const line of block.lines) {
+      starts.push(length);
+      length += line.text.length + 1;
+    }
+    const code = block.lines.map((line) => line.text).join("\n");
+    for (const { from, to, name } of coloursOf(code, block.language, redress)) {
+      block.lines.forEach((line, index) => {
+        const [first, last] = [Math.max(from, starts[index]), Math.min(to, starts[index] + line.text.length)];
+        if (first < last) dressing.push(Decoration.inline(line.start + first - starts[index], line.start + last - starts[index], { class: name }));
+      });
+    }
+    block = undefined;
+  };
   doc.forEach((line, offset) => {
     const start = offset + 1;
     const text = line.textContent;
@@ -66,11 +84,17 @@ function dress(doc) {
     const fenced = FENCE.exec(text);
     if (fence) {
       wholeLine("code");
-      if (fenced && fenced[1][0] === fence[0] && fenced[1].length >= fence.length && text.trim() === fenced[1]) fence = undefined;
+      if (fenced && fenced[1][0] === fence[0] && fenced[1].length >= fence.length && text.trim() === fenced[1]) {
+        fence = undefined;
+        colour();
+      } else {
+        block.lines.push({ start, text });
+      }
       return;
     }
     if (fenced) {
       fence = fenced[1];
+      block = { language: text.trim().slice(fence.length).trim().split(/\s+/)[0].toLowerCase(), lines: [] };
       wholeLine("code");
       return;
     }
@@ -124,13 +148,17 @@ function dress(doc) {
     }
     for (const found of linkify.match(text) ?? []) span(found.index, found.lastIndex, { class: "address" });
   });
+  if (block) colour();
   return DecorationSet.create(doc, dressing);
 }
+
+// Dresses the source again, once what colours code has been fetched.
+let redress = () => {};
 
 const dressSource = new Plugin({
   state: {
     init: (_config, state) => dress(state.doc),
-    apply: (transaction, dressing) => (transaction.docChanged ? dress(transaction.doc) : dressing),
+    apply: (transaction, dressing) => (transaction.docChanged || transaction.getMeta("redress") ? dress(transaction.doc) : dressing),
   },
   props: {
     decorations(state) {
@@ -278,6 +306,7 @@ export function createEditor(source, reading, { onEdit, onSubmit, onState }) {
   let editable = true;
   let rendered;
   let enhancing;
+  let enhanced = 0;
   const view = new EditorView(
     { mount: source },
     {
@@ -318,11 +347,16 @@ export function createEditor(source, reading, { onEdit, onSubmit, onState }) {
     }
   );
 
+  redress = () => view.dispatch(view.state.tr.setMeta("redress", true).setMeta("addToHistory", false));
+
   const editor = {
     getMarkdown: () => toText(view.state.doc),
 
-    /** Puts `markdown` on the page, touching only what differs from what is there. */
-    setMarkdown(markdown) {
+    /**
+     * Puts `markdown` on the page, touching only what differs from what is
+     * there. `growing` says that more of it is still to come.
+     */
+    setMarkdown(markdown, growing = false) {
       const before = view.state.doc;
       const after = toDoc(markdown);
       const start = before.content.findDiffStart(after.content);
@@ -339,19 +373,43 @@ export function createEditor(source, reading, { onEdit, onSubmit, onState }) {
           .setMeta("addToHistory", false);
         view.dispatch(transaction);
       }
-      editor.render();
+      editor.render(growing);
     },
 
-    /** Shows the page as it reads, from what the source holds now. */
-    render() {
+    /**
+     * Shows the page as it reads, from what the source holds now. Only the
+     * blocks that differ from what is shown are replaced, so that a diagram
+     * that has been drawn, say, stays while the page goes on below it.
+     */
+    render(growing = false) {
       const markdown = editor.getMarkdown();
-      if (markdown === rendered) return;
-      rendered = markdown;
-      reading.innerHTML = markdownIt.render(markdown);
-      // Diagrams and coloured code, once the text has stopped changing: a
-      // page that is still being read out changes many times a second.
+      const key = `${growing ? "growing" : "whole"}\n${markdown}`;
+      if (key === rendered) return;
+      rendered = key;
+      const fresh = document.createElement("template");
+      fresh.innerHTML = markdownIt.render(markdown, { growing, source: markdown });
+      for (const node of [...reading.childNodes]) if (node.renderedFrom === undefined) node.remove();
+      const blocks = [...fresh.content.children];
+      blocks.forEach((block, index) => {
+        const html = block.outerHTML;
+        const shown = reading.children[index];
+        if (shown?.renderedFrom === html) return;
+        block.renderedFrom = html;
+        if (shown) shown.replaceWith(block);
+        else reading.append(block);
+      });
+      while (reading.children.length > blocks.length) reading.lastElementChild.remove();
+      // Diagrams, math and coloured code: at once for what has just come,
+      // but not more often than a few times a second, as a page that is
+      // being read out changes with every word.
+      const now = Date.now();
       clearTimeout(enhancing);
-      enhancing = setTimeout(() => enhance(reading), 120);
+      if (now - enhanced > 150) {
+        enhanced = now;
+        enhance(reading);
+      } else {
+        enhancing = setTimeout(() => { enhanced = Date.now(); enhance(reading); }, 150);
+      }
     },
 
     setEditable(value) {
